@@ -1,0 +1,51 @@
+# ===== Keil MDK5（g431-drive / f103-remote）=====
+# 保留 *.uvprojx（工程文件）；忽略个人窗口布局与调试配置
+*.uvguix.*
+*.uvoptx
+*.scvd
+DebugConfig/
+Listings/
+Objects/
+RTE/
+JLinkLog.txt
+JLinkSettings.ini
+
+# ===== 编译产物（Keil 输出已在 Objects/ 内，此处兜底）=====
+*.o
+*.d
+*.crf
+*.dep
+*.axf
+*.lnp
+*.iex
+*.map
+*.lst
+*.htm
+*.bak
+
+# ===== ESP-IDF（esp32s3-control）=====
+# 保留 sdkconfig / sdkconfig.defaults / dependencies.lock
+build/
+sdkconfig.old
+managed_components/
+
+# ===== ROS 2（rdk-nav）=====
+install/
+log/
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# ===== 编辑器 / 系统 =====
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== 临时文件 =====
+*.tmp
+*~

@@ -1,0 +1,13 @@
+# 文本文件仓库内统一 LF——避免 Windows 写的脚本在 Linux 板子上
+# 报 bad interpreter: /bin/bash^M
+* text=auto eol=lf
+
+# Windows 专有脚本保留 CRLF
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# 二进制文件不做文本转换与 diff
+*.pdf binary
+*.png binary
+*.jpg binary
+*.zip binary
