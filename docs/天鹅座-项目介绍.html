@@ -663,7 +663,7 @@ td num,.num{font-variant-numeric:tabular-nums}
           <div class="ln wip"><span class="st wip">[ .. ]</span><span class="k">GNSS</span><span class="m">UM982 · 双天线定向就绪，等待星基增强</span></div>
           <div class="ln"><span class="st ok">[ OK ]</span><span class="k">EKF</span><span class="m">local + global 已收敛</span></div>
           <div class="ln"><span class="st ok">[ OK ]</span><span class="k">RDK</span><span class="m">X5 上线 · stereonet 23 fps</span></div>
-          <div class="ln"><span class="st ok">[ OK ]</span><span class="k">STAND</span><span class="m">支撑杆收起</span></div>
+          <div class="ln wip"><span class="st wip">[ .. ]</span><span class="k">STAND</span><span class="m">支撑杆（被动）· 待人工踢开</span></div>
           <div class="ln"><span class="st go">[ &gt;&gt; ]</span><span class="k">READY</span><span class="m">平衡环接管 · 工作车速 1 ~ 4 m/s<span class="cursor"></span></span></div>
         </div>
         <div class="pfoot">
@@ -697,7 +697,7 @@ td num,.num{font-variant-numeric:tabular-nums}
       <li><a href="#s7"><b>转向</b><em>按指令转弯，最小转弯半径随车速变化</em></a></li>
       <li><a href="#s8"><b>自主导航</b><em>陌生园区里自己走到目标点，不用基站，也不用建图</em></a></li>
       <li><a href="#s9"><b>自主避障</b><em>看得见障碍；绕得过就绕，绕不过就停</em></a></li>
-      <li><a href="#s10"><b>失效保护</b><em>保不住平衡时，撑杆接住，或干脆放倒</em></a></li>
+      <li><a href="#s10"><b>失效保护</b><em>保不住平衡时，干脆放倒</em></a></li>
       <li><a href="#s11"><b>远程接管</b><em>遥控器管当下，上位机管全局</em></a></li>
     </ul>
   </div>
@@ -879,7 +879,7 @@ td num,.num{font-variant-numeric:tabular-nums}
               <path d="M273 494 L309 494" fill="none" stroke="var(--ink3)" stroke-width="5" stroke-linecap="round" class="edge"/>
               <path d="M349 404 L299 504" fill="none" stroke="transparent" stroke-width="22" class="hit"/>
             </g>
-            <text x="266" y="544" class="t3" text-anchor="middle">电动支撑杆</text>
+            <text x="266" y="544" class="t3" text-anchor="middle">被动支撑杆</text>
           </svg>
         </div>
         <div>
@@ -892,7 +892,7 @@ td num,.num{font-variant-numeric:tabular-nums}
             <li><button type="button" data-part="gnss" aria-pressed="false">GNSS 双天线</button></li>
             <li><button type="button" data-part="stereo" aria-pressed="false">双目相机</button></li>
             <li><button type="button" data-part="lidar" aria-pressed="false">激光雷达</button></li>
-            <li><button type="button" data-part="stand" aria-pressed="false">电动支撑杆</button></li>
+            <li><button type="button" data-part="stand" aria-pressed="false">被动支撑杆</button></li>
           </ul>
           <button class="tour" id="tour" type="button" aria-pressed="false">逐个看一遍</button>
           <div class="part-info" id="partinfo"></div>
@@ -933,9 +933,9 @@ td num,.num{font-variant-numeric:tabular-nums}
         DTOF，360°，测距 0.03 ~ 25 m，60 Klux 抗光，多回波能检玻璃幕墙。<br>
         它是两类传感器里<strong>唯一能覆盖车后方</strong>的；补双目失效的无纹理场景，逆光下是第二来源。
       </div>
-      <div data-part="stand" data-name="电动支撑杆，断电自动展开">
-        失效保护的最后一环：车速低于 3 km/h 且软停车失败时展开，把车接住。<br>
-        展开时间 ≤ 300 ms 是硬指标——车体自由倒下的时间常数只有 0.29 s。保持收起靠<strong>机械自锁</strong>，不靠持续通电的电磁铁：电磁铁断线会让撑杆在行驶中弹出，比自然倒地更危险。
+      <div data-part="stand" data-name="被动支撑杆，人工操作">
+        起立与停机时的机械支撑：上电、动量轮起转、平衡环接管之后，由<strong>人工踢开</strong>；停机时人工扶持再放下。<br>
+        它不接电、不参与控制，也<strong>不在失效保护链里</strong>——车上没有能自动接住车体的装置。
       </div>
     </div>
   </div>
@@ -1169,10 +1169,10 @@ td num,.num{font-variant-numeric:tabular-nums}
 <section class="sec" id="s10" data-nav="失效保护">
   <div class="wrap">
     <div class="sec-h"><span class="idx">能力 6 / 7</span><h2>失效保护</h2></div>
-    <p class="lead">保不住平衡的时候怎么办。答案是<strong>分六级往下退</strong>，每一级都比上一级更保守，直到干脆认输把车放倒。</p>
+    <p class="lead">保不住平衡的时候怎么办。答案是<strong>分五级往下退</strong>，每一级都比上一级更保守，直到干脆认输把车放倒。</p>
     <figure class="fig">
       <div class="figscroll">
-        <svg viewBox="0 0 820 360" role="img" aria-label="六级降级阶梯：正常、可恢复、饱和、软停车、撑杆接住、认输，严重程度自左向右递增">
+        <svg viewBox="0 0 820 360" role="img" aria-label="五级降级阶梯：正常、可恢复、饱和、软停车、认输，严重程度自左向右递增">
           <g class="step">
             <rect x="20" y="40" width="120" height="54" rx="3" class="bx" stroke="var(--cyan)"/>
             <text x="80" y="72" class="t2" text-anchor="middle">正常</text>
@@ -1191,11 +1191,7 @@ td num,.num{font-variant-numeric:tabular-nums}
           </g>
           <g class="step">
             <rect x="540" y="208" width="120" height="54" rx="3" class="bx" stroke="var(--danger)"/>
-            <text x="600" y="240" class="t2" text-anchor="middle">撑杆接住</text>
-          </g>
-          <g class="step">
-            <rect x="670" y="250" width="120" height="54" rx="3" class="bx" stroke="var(--danger)"/>
-            <text x="730" y="282" class="t2" text-anchor="middle">认输</text>
+            <text x="600" y="240" class="t2" text-anchor="middle">认输</text>
           </g>
 
           <text x="20" y="330" class="t3">严重程度自左向右递增 ── 每一级都比上一级更保守</text>
@@ -1211,7 +1207,6 @@ td num,.num{font-variant-numeric:tabular-nums}
           <tr><td><strong>可恢复</strong></td><td>倾角 &lt; 8°</td><td>正常纠偏，飞轮卸载环工作</td></tr>
           <tr><td><strong>饱和</strong></td><td>飞轮转速进入 ±90% 上限</td><td>强制进入卸载模式，牺牲平衡精度换回动量</td></tr>
           <tr><td><strong>软停车</strong></td><td>RDK 指令 / 电池低压截止</td><td>优先保持平衡，最大制动减速到 0</td></tr>
-          <tr><td><strong>撑杆接住</strong></td><td>车速 &lt; 3 km/h 且软停车失败</td><td>支撑杆展开接住车体，<strong>平衡环立即退出</strong></td></tr>
           <tr><td><strong>认输</strong></td><td>倾角超限且 1 s 未收敛；或车速 &gt; 3 km/h 时失稳</td><td>关断三相桥、飞轮自由滑行、舵机回中、蜂鸣器</td></tr>
         </tbody>
       </table>
@@ -1219,7 +1214,7 @@ td num,.num{font-variant-numeric:tabular-nums}
     <div class="impl">
       <span><b>急停走 CAN 指令，车上不设物理按钮</b>——行驶中（1 ~ 4 m/s）人追不上车、够不着按，物理按钮恰恰覆盖不到最需要它的场景。改成由 RDK 或上位机发一帧 <strong>0x001</strong>，STM32 收到即封锁 PWM 并拉低 EN_GATE，立刻失力、接受倒地。</span>
       <span><b>代价是什么</b>——CAN 总线断线时急停完全失效，只剩拔电池。第一层保护（DRV8301 的过流保护与定时器硬件刹车）仍完全独立于软件，但独立于 MCU 的那层兜底没有了，这是写进文档的、明确接受的边界。</span>
-      <span><b>撑杆展开与平衡环退出必须原子发生</b>——否则飞轮会用几牛·米的力矩去撬支撑杆。展开由弹簧驱动（&lt; 100 ms），保持收起靠机械自锁，不靠持续通电的电磁铁。</span>
+      <span><b>最后一级就是「认输」</b>——支撑杆改为被动（人工踢开 / 放下）后，车上没有能自动接住车体的装置，失稳即倒地。</span>
     </div>
   </div>
 </section>
@@ -1364,9 +1359,7 @@ td num,.num{font-variant-numeric:tabular-nums}
           <tr><th>驱动方式</th><td>摩擦驱动压后轮胎，压紧力 70 ~ 100 N</td></tr>
           <tr><th>车速</th><td>工作 <strong>1 ~ 4 m/s</strong>，设计包线 5 m/s</td></tr>
           <tr><th>最小转弯半径</th><td>1.2 m @ ≤2 m/s；<strong>4.5 m @ 4 m/s</strong></td></tr>
-          <tr><th>转向执行器</th><td>飞特 ST-3035-C001 总线舵机（12 V，35 kg·cm，12 位磁编码）</td></tr>
-          <tr><th>支撑杆</th><td>电动，断电自动展开，展开 ≤ 300 ms</td></tr>
-          <tr><th>控制域 IMU</th><td>维特 HWT606（六轴，500 Hz，无磁力计）</td></tr>
+          <tr><th>转向执行器</th><td>飞特 ST-3035-C001 总线舵机（12 V，35 kg·cm，12 位磁编码）</td></tr>          <tr><th>控制域 IMU</th><td>维特 HWT606（六轴，500 Hz，无磁力计）</td></tr>
           <tr><th>主感知</th><td>RDK GS130WI 双目（全局快门，基线 70 mm，板载 IMU）</td></tr>
           <tr><th>补位感知</th><td>乐动 D800 激光雷达（DTOF，60 Klux，0.03 ~ 25 m）</td></tr>
           <tr><th>定位与航向</th><td>和芯星通 UM982 双天线定向 + 星基 PPP</td></tr>
