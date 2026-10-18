@@ -1,7 +1,7 @@
 # 天鹅座（Cygnus）自平衡自行车
 
-无人自主平台的自平衡自行车，由 STM32G431 电驱、ESP32-S3 下位机、RDK X5
-上位机三端构成控制系统，另配 STM32F103 遥控器作为按需上电的手动手段。
+无人自主平台的自平衡自行车，由 STM32G431 电驱、ESP32-S3 下位机与 RDK X5
+决策端构成控制系统，另配 STM32F103 遥控器作为按需上电的手动手段。
 验收分三层递进：静止平衡 → 行驶与转向 → 陌生园区自主导航。
 
 ## 目录导航
@@ -11,8 +11,8 @@
 | [g431-drive](g431-drive/) | 电驱 | STM32G431RBT6 + DRV8301 ×2 | CubeMX + Keil MDK5 |
 | [esp32s3-control](esp32s3-control/) | 下位机 | ESP32-S3 | ESP-IDF |
 | [f103-remote](f103-remote/) | 遥控器 | STM32F103C8T6 + NRF24L01P | Keil MDK5 |
-| [rdk-nav](rdk-nav/) | 上位机 | RDK X5 8G | ROS 2 Humble |
-| [shared/can](shared/can/) | 四端契约 | CAN 帧定义与 ID 分配 | — |
+| [rdk-nav](rdk-nav/) | 决策端 | RDK X5 8G | ROS 2 Humble |
+| [shared/can](shared/can/) | CAN 三端契约 | CAN 帧定义与 ID 分配 | — |
 | [docs](docs/) | 文档 | 技术方案 / 参数 / 设计方案 | — |
 | [hardware](hardware/) | 硬件 | 原理图 / PCB / 机械图纸 | — |
 | [tools](tools/) | 脚本 | 日志解析 / 协议生成 | — |

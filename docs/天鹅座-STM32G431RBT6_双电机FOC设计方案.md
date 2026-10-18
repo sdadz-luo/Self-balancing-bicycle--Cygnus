@@ -106,7 +106,7 @@
 > | ---- | --------------- | ---------- | ---------------- | ------------------------------------------ |
 > | PA2  | AF7 = USART2_TX | DEBUG_TX   | USB-TTL 模块 RX  | 调试串口日志输出                           |
 > | PA3  | AF7 = USART2_RX | DEBUG_RX   | USB-TTL 模块 TX  | 调试串口命令接收                           |
-> | PA11 | AF9 = FDCAN1_RX | CAN_RX     | CAN 收发器 RXD   | CAN 总线接收（接收上位机速度/角度命令）    |
+> | PA11 | AF9 = FDCAN1_RX | CAN_RX     | CAN 收发器 RXD   | CAN 总线接收（接收下位机 ESP32 的控制指令） |
 > | PA12 | AF9 = FDCAN1_TX | CAN_TX     | CAN 收发器 TXD   | CAN 总线发送（上报实际速度/电流/故障状态） |
 > | PC2  | ADC12_IN8       | VBUS_SENSE | 母线电压分压电路 | 电池电压/母线电压监测                      |
 >

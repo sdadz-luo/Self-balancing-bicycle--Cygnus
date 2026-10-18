@@ -657,12 +657,12 @@ td num,.num{font-variant-numeric:tabular-nums}
         <div class="pbody" id="bootlog">
           <div class="ln"><span class="st ok">[ OK ]</span><span class="k">BOOT</span><span class="m">STM32G431 · DRV8301 ×2 · 100 A</span></div>
           <div class="ln"><span class="st ok">[ OK ]</span><span class="k">IMU</span><span class="m">HWT606 · 500 Hz · 带宽已改 256 Hz</span></div>
-          <div class="ln"><span class="st ok">[ OK ]</span><span class="k">CAN</span><span class="m">500 kbps · 三个节点在线</span></div>
+          <div class="ln"><span class="st ok">[ OK ]</span><span class="k">CAN</span><span class="m">500 kbps · 电驱状态帧已收到</span></div>
           <div class="ln"><span class="st ok">[ OK ]</span><span class="k">SERVO</span><span class="m">ST-3035 回中 · 位置可回读</span></div>
           <div class="ln"><span class="st ok">[ OK ]</span><span class="k">RADIO</span><span class="m">NRF24L01 · 250 kbps · 待接管</span></div>
           <div class="ln wip"><span class="st wip">[ .. ]</span><span class="k">GNSS</span><span class="m">UM982 · 双天线定向就绪，等待星基增强</span></div>
-          <div class="ln"><span class="st ok">[ OK ]</span><span class="k">EKF</span><span class="m">local + global 已收敛</span></div>
-          <div class="ln"><span class="st ok">[ OK ]</span><span class="k">RDK</span><span class="m">X5 上线 · stereonet 23 fps</span></div>
+          <div class="ln wip"><span class="st wip">[ .. ]</span><span class="k">EKF</span><span class="m">local + global 后台收敛中</span></div>
+          <div class="ln wip"><span class="st wip">[ .. ]</span><span class="k">RDK</span><span class="m">X5 异步上线 · 不阻塞控制域</span></div>
           <div class="ln wip"><span class="st wip">[ .. ]</span><span class="k">STAND</span><span class="m">支撑杆（被动）· 待人工踢开</span></div>
           <div class="ln"><span class="st go">[ &gt;&gt; ]</span><span class="k">READY</span><span class="m">平衡环接管 · 工作车速 1 ~ 4 m/s<span class="cursor"></span></span></div>
         </div>
@@ -709,7 +709,7 @@ td num,.num{font-variant-numeric:tabular-nums}
     <p class="lead">车上三块板，各管一段，谁也不越界。切开它们的理由只有一条：<strong>实时的那部分不能被人拖慢</strong>。</p>
     <figure class="fig">
       <div class="figscroll">
-        <svg viewBox="0 0 880 648" role="img" aria-label="三端分工架构图：STM32G431 电驱与 ESP32-S3 下位机同处控制域，RDK X5 上位机独立在决策域，三者经一条 CAN 总线互联">
+        <svg viewBox="0 0 880 648" role="img" aria-label="三端分工架构图：STM32G431 电驱与 ESP32-S3 下位机同处控制域，RDK X5 决策端独立在决策域，三者经一条 CAN 总线互联">
           <rect x="24" y="24" width="832" height="288" rx="14" class="zone"/>
           <text x="48" y="56" class="t3">控制域，实时闭环，不许丢包</text>
 
@@ -742,7 +742,7 @@ td num,.num{font-variant-numeric:tabular-nums}
 
           <rect x="280" y="436" width="320" height="168" rx="10" class="bx"/>
           <text x="304" y="473" class="t">RDK X5</text>
-          <text x="304" y="497" class="t3">上位机，决策</text>
+          <text x="304" y="497" class="t3">决策端</text>
           <line x1="304" y1="514" x2="576" y2="514" class="ln"/>
           <text x="304" y="540" class="t2">定位融合，路径规划，避障</text>
           <text x="304" y="566" class="t2">GNSS UM982，双目 GS130WI</text>
@@ -934,7 +934,7 @@ td num,.num{font-variant-numeric:tabular-nums}
         它是两类传感器里<strong>唯一能覆盖车后方</strong>的；补双目失效的无纹理场景，逆光下是第二来源。
       </div>
       <div data-part="stand" data-name="被动支撑杆，人工操作">
-        起立与停机时的机械支撑：上电、动量轮起转、平衡环接管之后，由<strong>人工踢开</strong>；停机时人工扶持再放下。<br>
+        起立与停机时的机械支撑：上电、动量轮启动、平衡环接管之后，由<strong>人工踢开</strong>；停机时人工扶持再放下。<br>
         它不接电、不参与控制，也<strong>不在失效保护链里</strong>——车上没有能自动接住车体的装置。
       </div>
     </div>
@@ -1212,8 +1212,8 @@ td num,.num{font-variant-numeric:tabular-nums}
       </table>
     </div>
     <div class="impl">
-      <span><b>急停走 CAN 指令，车上不设物理按钮</b>——行驶中（1 ~ 4 m/s）人追不上车、够不着按，物理按钮恰恰覆盖不到最需要它的场景。改成由 RDK 或上位机发一帧 <strong>0x001</strong>，STM32 收到即封锁 PWM 并拉低 EN_GATE，立刻失力、接受倒地。</span>
-      <span><b>代价是什么</b>——CAN 总线断线时急停完全失效，只剩拔电池。第一层保护（DRV8301 的过流保护与定时器硬件刹车）仍完全独立于软件，但独立于 MCU 的那层兜底没有了，这是写进文档的、明确接受的边界。</span>
+      <span><b>急停走 CAN 指令，车上不设物理按钮</b>——行驶中（1 ~ 4 m/s）人追不上车、够不着按，物理按钮恰恰覆盖不到最需要它的场景。改成由 RDK、上位机或遥控器发起 <strong>0x001</strong> 帧，STM32 收到即封锁 PWM 并拉低 EN_GATE，立刻失力、接受倒地。</span>
+      <span><b>代价是什么</b>——CAN 总线断线时急停完全失效，只剩拔电池。第一层保护（DRV8301 的过流保护与定时器硬件刹车）仍完全独立于软件，但独立于 MCU 的人工兜底（物理按钮）没有了，这是写进文档的、明确接受的边界。</span>
       <span><b>最后一级就是「认输」</b>——支撑杆改为被动（人工踢开 / 放下）后，车上没有能自动接住车体的装置，失稳即倒地。</span>
     </div>
   </div>
@@ -1253,7 +1253,7 @@ td num,.num{font-variant-numeric:tabular-nums}
             <text x="72" y="290" class="t3">指令仲裁与平滑</text>
             <rect x="556" y="212" width="256" height="92" rx="3" class="bx" stroke="var(--cyan)"/>
             <text x="580" y="244" class="t2">RDK X5</text>
-            <text x="580" y="270" class="t3">上位机 · 决策域</text>
+            <text x="580" y="270" class="t3">决策端</text>
             <text x="580" y="290" class="t3">foxglove_bridge</text>
           </g>
           <g class="flow">
@@ -1332,12 +1332,12 @@ td num,.num{font-variant-numeric:tabular-nums}
           <text x="735" y="276" class="t3" text-anchor="middle">逻辑</text>
         </svg>
       </div>
-      <figcaption><b>功耗的大头是 RDK X5，不是电机。</b>它空转时整车约 30 W，感知全开时约 45 W——续航从 3.3 小时掉到 2.2 小时，差别全在上位机跑不跑感知。电机只在纠偏的瞬间吃大电流，那是不到半秒的尖峰。</figcaption>
+      <figcaption><b>功耗的大头是 RDK X5，不是电机。</b>它空转时整车约 30 W，感知全开时约 45 W——续航从 3.3 小时掉到 2.2 小时，差别全在 RDK X5 跑不跑感知。电机只在纠偏的瞬间吃大电流，那是不到半秒的尖峰。</figcaption>
     </figure>
     <div class="impl">
       <span><b>母线耐压按 50 V 选，不是 35 V</b>——飞轮被反向力矩减速时电机发电，能量会灌回母线，瞬时回灌电流可达百安，把电压顶高 1 ~ 2 V。6S 满电 25.2 V 卡 35 V 太紧。</span>
       <span><b>低压保护两级，软降载不硬切</b>——3.5 V/片起降载，3.2 V/片限流到零。航模锂电不带 BMS，截止点贴太近会误触发欠压保护，反而造成失控。</span>
-      <span><b>电池与上位机要低装</b>——质心每抬高 0.3 m，力矩需求就多出约 3 N·m，直接把飞轮和电机的规格抬上去。</span>
+      <span><b>电池与 RDK X5 要低装</b>——质心每抬高 0.3 m，力矩需求就多出约 3 N·m，直接把飞轮和电机的规格抬上去。</span>
     </div>
   </div>
 </section>

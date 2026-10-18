@@ -66,7 +66,7 @@
 > | 备选 | ESP32-S3-WROOM-1**U**（IPEX） | 需要把 WiFi 天线用馈线引出时选它（见 3.1） |
 >
 > - sdkconfig 须配 `CONFIG_SPIRAM_MODE_OCT=y`（R8 是八线 PSRAM，配错认不到）；
-> - 已有 N16R8 开发板一块，用于 M0 阶段前期验证。
+> - 已有 N16R8 开发板一块，用于开发阶段 0 的前期验证。
 >
 > ### 2.2 CAN 收发器
 >

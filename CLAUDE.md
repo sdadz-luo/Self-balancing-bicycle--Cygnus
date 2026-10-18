@@ -11,9 +11,10 @@
 
 ## 跨端约定
 
-- **[shared/can/](shared/can/) 是四端接口契约**：改 CAN 帧定义等于改四端
-  代码；新增帧必须落入既有 ID 分配段（安全 / 控制 / 电驱状态 / 规划 /
-  整车状态 / 保护）
+- **[shared/can/](shared/can/) 是 CAN 三端（STM32 / ESP32 / RDK）的接口契约**：
+  改 CAN 帧定义等于改这三端代码；新增帧必须落入既有 ID 分配段（安全 / 控制 /
+  电驱状态 / 规划 / 整车状态 / 保护）。遥控器是独立第四端，经 NRF24L01 接
+  ESP32，其帧契约见参数 4.4
 - 四端各自独立构建，**布局沿用各工具链的标准结构**（CubeMX / ESP-IDF /
   colcon），不手工整理生成目录——会被代码生成器打乱
 
@@ -24,6 +25,6 @@
 | 电驱 | [g431-drive/](g431-drive/) | Keil MDK5 打开 `MDK-ARM/*.uvprojx` |
 | 下位机 | [esp32s3-control/](esp32s3-control/) | `idf.py build` |
 | 遥控器 | [f103-remote/](f103-remote/) | Keil MDK5（同电驱） |
-| 上位机 | [rdk-nav/](rdk-nav/) | 板上 `colcon build --symlink-install` |
+| 决策端 | [rdk-nav/](rdk-nav/) | 板上 `colcon build --symlink-install` |
 
 各端的改动禁区（改了会牵连别处的硬约束）见该端目录下的 `CLAUDE.md`。
