@@ -7,4 +7,4 @@
   [hardware/drive-board](../hardware/drive-board/)
 - 工具链：STM32CubeMX + Keil MDK5
 - 文档：[电驱设计方案](../docs/天鹅座-STM32G431RBT6_双电机FOC设计方案.md)
-- 构建方式与改动禁区见 [AGENTS.md](AGENTS.md)
+- 构建方式与改动禁区见 [CLAUDE.md](CLAUDE.md)
