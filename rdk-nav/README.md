@@ -8,4 +8,4 @@ Nav2 路径规划，只输出「目标速度 + 目标航向」建议值（20 ~ 5
 - 布局：ROS 2 包放 `src/`；`build/` `install/` `log/` 为构建产物，不入库
 - 文档：[参数与配置·五、RDK X5 决策端](../docs/天鹅座-参数与配置.md)
 - **代码在板上开发**，本目录是归档副本——工作流与改动禁区见
-  [CLAUDE.md](CLAUDE.md)
+  [AGENTS.md](AGENTS.md)

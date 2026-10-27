@@ -8,7 +8,7 @@ IMU（HWT606）直挂本地，经 CAN 与电驱板、RDK X5 通信。
 - 工具链：ESP-IDF
 - 板级设计与固件架构：[下位机设计方案](../docs/天鹅座-ESP32S3_下位机设计方案.md)
 - 文档：[参数与配置·四、ESP32-S3 下位机](../docs/天鹅座-参数与配置.md)
-- 构建方式与改动禁区见 [CLAUDE.md](CLAUDE.md)
+- 构建方式与改动禁区见 [AGENTS.md](AGENTS.md)
 
 ## 功能
 
