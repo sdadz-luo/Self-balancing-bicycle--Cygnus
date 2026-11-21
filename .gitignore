@@ -7,8 +7,11 @@ DebugConfig/
 Listings/
 Objects/
 RTE/
+MDK-ARM/*/
 JLinkLog.txt
 JLinkSettings.ini
+# CubeMX 本地缓存（由 .ioc 重新生成时自动重建）
+.mxproject
 
 # ===== 编译产物（Keil 输出已在 Objects/ 内，此处兜底）=====
 *.o
@@ -16,6 +19,8 @@ JLinkSettings.ini
 *.crf
 *.dep
 *.axf
+*.hex
+*.sct
 *.lnp
 *.iex
 *.map

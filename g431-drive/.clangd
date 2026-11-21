@@ -1,0 +1,37 @@
+CompileFlags:
+  Add:
+    # Target: STM32G431RBTx (cortex-m4)
+    - '-target'
+    - 'arm-none-eabi'
+    - '-mcpu=cortex-m4'
+    - '-mthumb'
+    - '-mfpu=fpv4-sp-d16'
+    - '-mfloat-abi=hard'
+
+    # ARMCLANG v6 (与 clangd 兼容性最好)
+
+    # Preprocessor defines from Keil project
+    - '-DUSE_HAL_DRIVER'
+    - '-DSTM32G431xx'
+
+    # Include paths
+    - '-I'
+    - 'Core/Inc'
+    - '-I'
+    - 'Drivers/STM32G4xx_HAL_Driver/Inc'
+    - '-I'
+    - 'Drivers/STM32G4xx_HAL_Driver/Inc/Legacy'
+    - '-I'
+    - 'Drivers/CMSIS/Device/ST/STM32G4xx/Include'
+    - '-I'
+    - 'Drivers/CMSIS/Include'
+    - '-I'
+    - 'code'
+
+    # libc: 禁用宿主 libc, 使用 ARM GCC newlib
+    - '-nostdlibinc'
+    - '-I'
+    - 'C:/Path/toolchains/arm-gcc/arm-none-eabi/include'
+
+    # C standard
+    - '-std=c11'

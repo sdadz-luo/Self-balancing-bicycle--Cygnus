@@ -18,6 +18,12 @@ Keil MDK5 打开 `MDK-ARM/*.uvprojx`；改 `.ioc` 后用 CubeMX 重新生成代�
 - **分流电阻开尔文连接**（0.25 mΩ）、DRV8301 增益 40 V/V；小电流段精度差是
   预期行为，**不得据此判定电流环故障**
 - VDS 过流阈值与 OCP 模式必须配置（锁存关断档，保证过流拉 nFAULT 进 BKIN 链）
+- **IWDG 的启动延后是硬要求**：G4 HAL 的 `HAL_IWDG_Init` 内部即启动（无独立
+  Start API），若 `main()` 自动调用，初始化即放狗、上电序列中途被咬。
+  IWDG 留在 CubeMX 配置（P32 / W20 / R40），但 **Advanced Settings 里
+  IWDG 的 Generate Function Call 必须保持不勾**——`MX_IWDG_Init()` 只在
+  `app_init` 序列末显式调用（调用时机即启动时机）。勾回去等于废掉这个
+  设计；每次重新生成后 `grep MX_IWDG_Init main.c` 确认初始化序列里没有它
 - 母线与功率器件耐压 ≥ 50 V + TVS 钳位（飞轮卸载会回灌能量）
 - 上电验证走**分阶段**流程（只焊 MCU → 加 DRV8301 不焊 MOSFET → 限流电源带
   小电机 → 台架逐级升流 → 才接真飞轮），不得跳级——把硬件问题与控制问题
