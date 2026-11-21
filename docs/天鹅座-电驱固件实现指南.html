@@ -1,0 +1,879 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>G431 电驱 · 固件实现指南</title>
+<meta name="description" content="天鹅座电驱端（STM32G431RBT6 双电机 FOC）固件骨架实现指南：CubeMX 基线、上电序列、保护链、电流环、CAN 收发与坑清单。">
+<script>
+(function () {
+  try {
+    var t = localStorage.getItem("g431-guide-theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  } catch (e) {}
+})();
+</script>
+<style>
+:root {
+  --bg: #f1f4f6;
+  --surface: #ffffff;
+  --surface-2: #e9eef2;
+  --ink: #16232f;
+  --ink-2: #42566a;
+  --ink-3: #5c7085;
+  --line: #c6d1da;
+  --line-strong: #9fb0bf;
+  --accent: #0c6285;
+  --accent-bg: #e0edf3;
+  --warn: #7d5400;
+  --warn-bg: #faf1dc;
+  --danger: #a02328;
+  --danger-bg: #fbe9e9;
+  --ok: #24663c;
+  --ok-bg: #e4f1e8;
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, "Liberation Mono", monospace;
+  --sans: "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f171f; --surface: #16212b; --surface-2: #1c2a36;
+    --ink: #e2ebf2; --ink-2: #a9bdcb; --ink-3: #8ea6b6;
+    --line: #2c3d4a; --line-strong: #4a6172;
+    --accent: #63b7d6; --accent-bg: #122a35;
+    --warn: #d9a441; --warn-bg: #2a2113;
+    --danger: #e27a74; --danger-bg: #2e1919;
+    --ok: #6fc08a; --ok-bg: #142b1d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f171f; --surface: #16212b; --surface-2: #1c2a36;
+  --ink: #e2ebf2; --ink-2: #a9bdcb; --ink-3: #8ea6b6;
+  --line: #2c3d4a; --line-strong: #4a6172;
+  --accent: #63b7d6; --accent-bg: #122a35;
+  --warn: #d9a441; --warn-bg: #2a2113;
+  --danger: #e27a74; --danger-bg: #2e1919;
+  --ok: #6fc08a; --ok-bg: #142b1d;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--sans); font-size: 15px; line-height: 1.75;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code, .num { font-family: var(--mono); font-size: 0.9em; overflow-wrap: break-word; }
+code { background: var(--surface-2); padding: 0.1em 0.35em; border-radius: 3px; }
+
+.topbar {
+  position: sticky; top: 0; z-index: 50;
+  display: flex; align-items: center; gap: 16px;
+  padding: 10px 24px; background: var(--surface); border-bottom: 1px solid var(--line);
+}
+.topbar .brand { font-weight: 700; letter-spacing: 0.02em; }
+.topbar .brand small { color: var(--ink-3); font-weight: 400; margin-left: 10px; }
+.topbar .spacer { flex: 1; }
+.themebtn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--surface-2); color: var(--ink);
+  border: 1px solid var(--line-strong); border-radius: 4px;
+  padding: 4px 10px; font-size: 13px; cursor: pointer; font-family: var(--sans);
+}
+.themebtn .ic-sun, .themebtn .ic-moon { display: none; }
+.themebtn .ic-sun svg, .themebtn .ic-moon svg { display: block; width: 14px; height: 14px; }
+:root[data-theme="dark"] .themebtn .ic-sun { display: inline-block; }
+:root[data-theme="dark"] .themebtn .ic-moon { display: none; }
+:root[data-theme="light"] .themebtn .ic-sun { display: none; }
+:root[data-theme="light"] .themebtn .ic-moon { display: inline-block; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .themebtn .ic-sun { display: inline-block; }
+  :root:not([data-theme="light"]) .themebtn .ic-moon { display: none; }
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .themebtn .ic-sun { display: none; }
+  :root:not([data-theme="dark"]) .themebtn .ic-moon { display: inline-block; }
+}
+
+.shell {
+  display: grid; grid-template-columns: 250px minmax(0, 1fr);
+  gap: 40px; max-width: 1220px; margin: 0 auto; padding: 26px 24px 64px;
+}
+@media (max-width: 940px) {
+  .shell { grid-template-columns: 1fr; gap: 18px; padding: 16px 16px 48px; }
+  .toc { position: static; order: -1; max-height: none; }
+}
+.toc {
+  position: sticky; top: 76px; align-self: start;
+  font-size: 13px; line-height: 1.55;
+  border-left: 2px solid var(--line-strong); padding-left: 14px;
+  max-height: calc(100vh - 100px); overflow-y: auto;
+}
+.toc .toc-title { font-weight: 700; margin-bottom: 8px; color: var(--ink-2); font-size: 12.5px; }
+.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.toc a { display: block; color: var(--ink-2); padding: 2px 6px; border-radius: 3px; }
+.toc a:hover { color: var(--ink); text-decoration: none; background: var(--surface-2); }
+.toc a.on { color: var(--accent); font-weight: 600; background: var(--accent-bg); }
+.toc .n { font-family: var(--mono); font-size: 12px; color: var(--ink-3); margin-right: 6px; }
+.toc .sub { padding-left: 22px; font-size: 12.5px; }
+@media (max-width: 520px) { .toc ol { grid-template-columns: 1fr 1fr; column-gap: 8px; } }
+
+main { min-width: 0; }
+h1 { font-size: 28px; line-height: 1.3; margin: 0 0 8px; }
+h2 { font-size: 21px; margin: 52px 0 12px; padding-top: 16px; border-top: 2px solid var(--ink); line-height: 1.35; }
+h2 .n { font-family: var(--mono); font-size: 14px; color: var(--accent); margin-right: 10px; vertical-align: 2px; }
+h3 { font-size: 16.5px; margin: 30px 0 10px; }
+h4 { font-size: 14.5px; margin: 18px 0 6px; }
+p { margin: 9px 0; max-width: 78ch; }
+.lede { font-size: 16px; color: var(--ink-2); max-width: 74ch; }
+ul, ol { margin: 8px 0; padding-left: 22px; max-width: 78ch; }
+li { margin: 4px 0; }
+strong { font-weight: 650; }
+.muted { color: var(--ink-3); font-size: 13.5px; }
+.baseline {
+  display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0;
+}
+.chip {
+  display: inline-block; font-size: 12px; line-height: 1.5;
+  padding: 1px 8px; border-radius: 3px; font-weight: 600; white-space: nowrap;
+}
+.chip.ok { background: var(--ok-bg); color: var(--ok); }
+.chip.warn { background: var(--warn-bg); color: var(--warn); }
+.chip.danger { background: var(--danger-bg); color: var(--danger); }
+.chip.info { background: var(--accent-bg); color: var(--accent); }
+
+.tablewrap { overflow-x: auto; margin: 12px 0; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; line-height: 1.6; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { background: var(--surface-2); font-weight: 650; white-space: nowrap; }
+tr:last-child td { border-bottom: none; }
+td .num, td code { white-space: nowrap; }
+
+.codeblk {
+  overflow-x: auto; margin: 12px 0; border: 1px solid var(--line); border-radius: 4px;
+  background: var(--surface); padding: 12px 16px;
+  font-family: var(--mono); font-size: 13px; line-height: 1.65;
+  white-space: pre;
+}
+.codeblk .c { color: var(--ink-3); }
+.codeblk .cm { color: var(--ok); }
+
+/* 判据条 */
+.judge {
+  margin: 10px 0; padding: 8px 12px; border-radius: 4px;
+  border: 1px solid var(--line); border-left: 4px solid var(--ok);
+  background: var(--ok-bg); font-size: 13.5px;
+}
+.judge b:first-child { color: var(--ok); }
+
+/* 坑卡：现象 / 机理 / 对策 */
+.pit {
+  display: grid; gap: 0; margin: 12px 0;
+  border: 1px solid var(--line); border-left: 4px solid var(--danger);
+  border-radius: 4px; background: var(--surface); font-size: 13.5px;
+}
+.pit > div { padding: 8px 14px; border-bottom: 1px dashed var(--line); }
+.pit > div:last-child { border-bottom: none; }
+.pit .tag { font-weight: 700; margin-right: 8px; }
+.pit .sym .tag { color: var(--danger); }
+.pit .why .tag { color: var(--warn); }
+.pit .fix .tag { color: var(--ok); }
+.pit p { margin: 2px 0; max-width: none; }
+
+/* 配置基线卡 */
+.cfg { margin: 14px 0; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
+.cfg .cfg-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px;
+  padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--surface-2);
+  border-radius: 4px 4px 0 0;
+}
+.cfg .cfg-head h4 { margin: 0; font-size: 15px; }
+.cfg .cfg-head .who { font-family: var(--mono); font-size: 12.5px; color: var(--ink-2); }
+.cfg dl { margin: 0; padding: 6px 14px 10px; }
+.cfg dt { font-family: var(--mono); font-size: 13.5px; color: var(--accent); margin-top: 8px; }
+.cfg dd { margin: 2px 0 0 0; font-size: 13.5px; color: var(--ink-2); max-width: 80ch; }
+.cfg dd b { color: var(--ink); }
+
+/* 步骤 */
+.steps { counter-reset: st; list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 10px; }
+.steps > li {
+  counter-increment: st; position: relative;
+  padding: 10px 14px 10px 46px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 4px; font-size: 14px;
+}
+.steps > li::before {
+  content: counter(st, decimal-leading-zero);
+  position: absolute; left: 12px; top: 10px;
+  font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--accent);
+}
+.steps > li .t { font-weight: 650; }
+.steps > li p { margin: 4px 0; max-width: none; font-size: 13.5px; color: var(--ink-2); }
+.steps > li p b { color: var(--ink); }
+
+.figure { margin: 16px 0 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); overflow-x: auto; }
+.figure svg { display: block; min-width: 760px; width: 100%; height: auto; }
+.figcap { font-size: 12.5px; color: var(--ink-3); margin: 6px 2px 0; }
+
+footer {
+  margin-top: 60px; padding-top: 16px; border-top: 1px solid var(--line);
+  font-size: 13.5px; color: var(--ink-2); max-width: 78ch;
+}
+footer code { color: var(--ink); }
+
+@media print {
+  :root:root {
+    --bg: #fff; --surface: #fff; --surface-2: #f2f2f2;
+    --ink: #000; --ink-2: #333; --ink-3: #444;
+    --line: #bbb; --line-strong: #888;
+    --accent: #0a4a66; --accent-bg: #eef4f7;
+    --warn: #664400; --warn-bg: #f8f2e2;
+    --danger: #7a1a1e; --danger-bg: #faecec;
+    --ok: #1d4d2e; --ok-bg: #e9f3ec;
+    color-scheme: light;
+  }
+  body { font-size: 12px; }
+  .topbar, .toc, .themebtn { display: none !important; }
+  .shell { display: block; max-width: none; padding: 0; }
+  h2 { break-after: avoid; margin-top: 26px; }
+  .tablewrap, .cfg, .pit, .figure, .steps > li, .codeblk { break-inside: avoid; }
+  a { color: inherit; text-decoration: none; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">G431 电驱 <small>固件实现指南 · 照着写骨架</small></div>
+  <div class="spacer"></div>
+  <button class="themebtn" data-theme-toggle id="themeBtn" aria-label="切换明暗主题">
+    <span class="ic-moon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg></span>
+    <span class="ic-sun" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4m11.4-11.4 1.4-1.4"/></svg></span>
+    <span>主题</span>
+  </button>
+</header>
+
+<div class="shell">
+
+<nav class="toc" aria-label="目录">
+  <div class="toc-title">目录</div>
+  <ol>
+    <li><a href="#howto"><span class="n">0</span>怎么用这份文档</a></li>
+    <li><a href="#scope"><span class="n">1</span>电驱端全景</a></li>
+    <li><a href="#pins"><span class="n">2</span>引脚全表</a></li>
+    <li><a href="#baseline"><span class="n">3</span>CubeMX 基线</a></li>
+    <li><a href="#fw-clock"><span class="sub">时钟 / TIM / ADC</span></a></li>
+    <li><a href="#fw-comm"><span class="sub">CAN / SPI / 其他</span></a></li>
+    <li><a href="#iwdg"><span class="sub">IWDG（启动延后）</span></a></li>
+    <li><a href="#layout"><span class="n">4</span>代码组织建议</a></li>
+    <li><a href="#seq"><span class="n">5</span>上电序列（逐步）</a></li>
+    <li><a href="#protect"><span class="n">6</span>保护链</a></li>
+    <li><a href="#foc"><span class="n">7</span>电流环与 FOC</a></li>
+    <li><a href="#drv"><span class="n">8</span>DRV8301 驱动</a></li>
+    <li><a href="#loop"><span class="n">9</span>CAN 与主循环</a></li>
+    <li><a href="#numbers"><span class="n">10</span>数值速查卡</a></li>
+    <li><a href="#pits"><span class="n">11</span>坑清单</a></li>
+    <li><a href="#bench"><span class="n">12</span>台架验证路线</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<section class="hero">
+  <h1>G431 电驱 · 固件实现指南</h1>
+  <p class="lede">
+    这块板子的 CubeMX 配置已经定稿、编译验证通过，<code>code/</code> 是空的。
+    这份文档按「写代码时会依次遇到的问题」组织：先给全每个外设<strong>配了什么、为什么</strong>，
+    再给每个实现阶段<strong>做什么、判据是什么、哪里会踩坑</strong>。跟着走就能把骨架立起来。
+  </p>
+  <div class="baseline">
+    <span class="chip ok">编译基线 0 错 0 警</span>
+    <span class="chip info">170 MHz · 20 kHz 电流环</span>
+    <span class="chip info">CAN 500 kbps 经典帧</span>
+    <span class="chip warn">DBC 未定稿（帧字段）</span>
+    <span class="chip warn">极对数待实测</span>
+  </div>
+</section>
+
+<!-- 0 -->
+<h2 id="howto"><span class="n">0</span>怎么用这份文档</h2>
+<ul>
+  <li>第 1~3 节是<strong>现状</strong>：硬件分工、引脚、CubeMX 里已经配好的东西。写代码前通读一遍，知道哪些不用碰。</li>
+  <li>第 4~9 节是<strong>施工顺序</strong>：代码组织 → 上电序列 → 保护链 → 电流环 → DRV 驱动 → CAN 与主循环。这个顺序不是随意的——每一步依赖前一步的产出。</li>
+  <li>第 10~12 节是<strong>速查</strong>：数值卡、坑清单、台架验证。写到一半卡住时回来查。</li>
+  <li>文中所有「判据」条是你自己验收每一步的检查点；「坑」卡是已经踩过的，别重复踩。</li>
+  <li>事实源优先级：<code>docs/天鹅座-技术方案.md</code> &gt; 参数与配置 &gt; 电驱设计方案 &gt; 本文。本文与前三者冲突时以前三者为准。</li>
+</ul>
+
+<!-- 1 -->
+<h2 id="scope"><span class="n">1</span>电驱端全景</h2>
+<p>电驱板是控制域的<strong>执行末端</strong>：它不决定车怎么平衡，只负责把 ESP32 下发的力矩/速度指令变成三相电流，并在一切出错时最快地关掉功率级。</p>
+
+<h3>双电机分工</h3>
+<div class="tablewrap"><table>
+  <thead><tr><th>电机</th><th>定时器</th><th>DRV8301</th><th>SPI 总线</th><th>编码器</th><th>控制环</th></tr></thead>
+  <tbody>
+    <tr><td><strong>电机 1 · 动量轮</strong></td><td>TIM8（PC6~PC8 / PC10~PC12）</td><td>DRV8301-1（nFAULT→PA15）</td><td>SPI1</td><td>MT6816-1</td><td><strong>力矩环</strong>（指令来自 ESP32 平衡环）</td></tr>
+    <tr><td><strong>电机 2 · 摩擦驱动</strong></td><td>TIM1（PA8~PA10 / PB13~PB15）</td><td>DRV8301-2（nFAULT→PD2）</td><td>SPI3</td><td>MT6816-2</td><td><strong>速度环</strong></td></tr>
+  </tbody>
+</table></div>
+<div class="pit">
+  <div class="sym"><span class="tag">注意</span>FOC 嵌套关系：电驱端只跑<strong>电流环</strong>（20 kHz）；力矩/速度环在 ESP32 上（200~500 Hz）。STM32 收到的是「力矩/速度指令」，换算成 Iq 目标后由电流环跟踪。不要在 STM32 上再搭一层速度环。</div>
+</div>
+
+<h3>信号流（单电机电流环）</h3>
+<div class="figure" role="img" aria-label="FOC 电流环框图：Iq/Id 目标经 PI 得 Vd/Vq，反 Park 换到 αβ，SVPWM 产生占空比，DRV8301 驱动电机，分流采样经 Clarke/Park 反馈">
+  <svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI','Microsoft YaHei',sans-serif">
+    <defs>
+      <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0 0 L10 5 L0 10 z" fill="var(--ink-2)"/>
+      </marker>
+    </defs>
+    <text x="30" y="34" font-size="13" font-weight="700" fill="var(--ink)">电流环（STM32，20 kHz，ADC 注入中断驱动）</text>
+    <!-- blocks -->
+    <rect x="30" y="60" width="120" height="52" fill="var(--surface-2)" stroke="var(--line-strong)" rx="3"/>
+    <text x="90" y="82" font-size="13" text-anchor="middle" fill="var(--ink)">Iq*/Id* 目标</text>
+    <text x="90" y="100" font-size="12" text-anchor="middle" fill="var(--ink-3)">力矩指令换算</text>
+
+    <rect x="190" y="60" width="110" height="52" fill="var(--surface)" stroke="var(--line-strong)" rx="3"/>
+    <text x="245" y="82" font-size="13" text-anchor="middle" fill="var(--ink)">PI ×2</text>
+    <text x="245" y="100" font-size="12" text-anchor="middle" fill="var(--ink-3)">d/q 独立</text>
+
+    <rect x="340" y="60" width="110" height="52" fill="var(--surface)" stroke="var(--line-strong)" rx="3"/>
+    <text x="395" y="90" font-size="13" text-anchor="middle" fill="var(--ink)">反 Park</text>
+
+    <rect x="490" y="60" width="110" height="52" fill="var(--surface)" stroke="var(--line-strong)" rx="3"/>
+    <text x="545" y="82" font-size="13" text-anchor="middle" fill="var(--ink)">SVPWM</text>
+    <text x="545" y="100" font-size="12" text-anchor="middle" fill="var(--ink-3)">≤ 0.93 调制比</text>
+
+    <rect x="640" y="60" width="110" height="52" fill="var(--accent-bg)" stroke="var(--accent)" rx="3"/>
+    <text x="695" y="82" font-size="13" text-anchor="middle" fill="var(--ink)">TIM1 / TIM8</text>
+    <text x="695" y="100" font-size="12" text-anchor="middle" fill="var(--ink-3)">中心对齐 20 kHz</text>
+
+    <rect x="640" y="180" width="110" height="52" fill="var(--accent-bg)" stroke="var(--accent)" rx="3"/>
+    <text x="695" y="202" font-size="13" text-anchor="middle" fill="var(--ink)">DRV8301</text>
+    <text x="695" y="220" font-size="12" text-anchor="middle" fill="var(--ink-3)">+ 三相桥 + 电机</text>
+
+    <rect x="440" y="180" width="150" height="52" fill="var(--surface)" stroke="var(--line-strong)" rx="3"/>
+    <text x="515" y="202" font-size="13" text-anchor="middle" fill="var(--ink)">分流采样 + ADC 注入</text>
+    <text x="515" y="220" font-size="12" text-anchor="middle" fill="var(--ink-3)">顶点触发 · 6.5 cycles</text>
+
+    <rect x="200" y="180" width="180" height="52" fill="var(--surface)" stroke="var(--line-strong)" rx="3"/>
+    <text x="290" y="202" font-size="13" text-anchor="middle" fill="var(--ink)">Clarke / Park</text>
+    <text x="290" y="220" font-size="12" text-anchor="middle" fill="var(--ink-3)">用 MT6816 电角度</text>
+
+    <rect x="30" y="180" width="120" height="52" fill="var(--surface)" stroke="var(--line-strong)" rx="3"/>
+    <text x="90" y="202" font-size="13" text-anchor="middle" fill="var(--ink)">Id/Iq 反馈</text>
+    <text x="90" y="220" font-size="12" text-anchor="middle" fill="var(--ink-3)">（零点已校）</text>
+
+    <!-- arrows -->
+    <line x1="150" y1="86" x2="186" y2="86" stroke="var(--ink-2)" marker-end="url(#arr)"/>
+    <line x1="300" y1="86" x2="336" y2="86" stroke="var(--ink-2)" marker-end="url(#arr)"/>
+    <line x1="450" y1="86" x2="486" y2="86" stroke="var(--ink-2)" marker-end="url(#arr)"/>
+    <line x1="600" y1="86" x2="636" y2="86" stroke="var(--ink-2)" marker-end="url(#arr)"/>
+    <line x1="695" y1="112" x2="695" y2="176" stroke="var(--ink-2)" marker-end="url(#arr)"/>
+    <line x1="640" y1="206" x2="594" y2="206" stroke="var(--ink-2)" marker-end="url(#arr)"/>
+    <line x1="440" y1="206" x2="384" y2="206" stroke="var(--ink-2)" marker-end="url(#arr)"/>
+    <line x1="200" y1="206" x2="154" y2="206" stroke="var(--ink-2)" marker-end="url(#arr)"/>
+    <!-- feedback up to PI -->
+    <polyline points="90,180 90,140 245,140 245,116" fill="none" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#arr)"/>
+    <text x="150" y="134" font-size="12" fill="var(--accent)">负反馈</text>
+    <!-- angle feed -->
+    <text x="330" y="262" font-size="12" fill="var(--ink-3)">电角度 = 机械角 × 极对数（MT6816，待实测极对数）——Park/反 Park 共用</text>
+  </svg>
+</div>
+<p class="figcap">电流环一个控制周期（50 µs）内的完整链路。虚线以上是软件，以下是功率级；ADC 注入由 PWM 顶点触发，所以采样、计算、输出天然同相。</p>
+
+<!-- 2 -->
+<h2 id="pins"><span class="n">2</span>引脚全表</h2>
+<p>按功能分组，CubeMX 已全部配置完毕。<strong>复用功能编号（AF）是硬信息</strong>——生成代码已验证，对照即可。</p>
+
+<h3>功率级 · 六路 PWM ×2</h3>
+<div class="tablewrap"><table>
+  <thead><tr><th>引脚</th><th>AF / 信号</th><th>连接</th><th>功能</th></tr></thead>
+  <tbody>
+    <tr><td>PC6 / PC7 / PC8</td><td>TIM8_CH1/2/3（AF4）</td><td>DRV8301-1 INH_C / INH_B / INH_A</td><td>电机 1 三路上桥</td></tr>
+    <tr><td>PC10 / PC11 / PC12</td><td>TIM8_CH1N/2N/3N（AF4）</td><td>DRV8301-1 INL_C / INL_B / INL_A</td><td>电机 1 三路下桥</td></tr>
+    <tr><td>PA8 / PA9 / PA10</td><td>TIM1_CH1/2/3（AF6）</td><td>DRV8301-2 INH_C / INH_B / INH_A</td><td>电机 2 三路上桥</td></tr>
+    <tr><td>PB13 / PB14</td><td>TIM1_CH1N/2N（AF6）</td><td>DRV8301-2 INL_C / INL_B</td><td>电机 2 下桥</td></tr>
+    <tr><td><strong>PB15</strong></td><td><strong>TIM1_CH3N（AF4，不是 AF6）</strong></td><td>DRV8301-2 INL_A</td><td>电机 2 W 相下桥</td></tr>
+  </tbody>
+</table></div>
+<p class="muted">PB15 配错的唯一表现是 W 相下桥完全没有输出——CubeMX 里已确认 AF4（tim.c:380），改任何生成代码前先看这条。</p>
+
+<h3>保护与使能</h3>
+<div class="tablewrap"><table>
+  <thead><tr><th>引脚</th><th>信号</th><th>连接</th><th>行为</th></tr></thead>
+  <tbody>
+    <tr><td>PB2</td><td>EN_GATE（GPIO 输出，初始 <strong>Low</strong>）</td><td>两片 DRV8301 EN_GATE</td><td>高电平使能栅极驱动；外部 10k 下拉保证复位期间关断</td></tr>
+    <tr><td>PA15</td><td>TIM1_BKIN（AF9）</td><td>DRV8301-1 nFAULT（外部 10k 上拉）</td><td><strong>电机 1 故障</strong>→ 硬件封锁 TIM1（电机 2 桥）；软件在中断里补封 TIM8</td></tr>
+    <tr><td>PD2</td><td>TIM8_BKIN（AF4）</td><td>DRV8301-2 nFAULT（外部 10k 上拉）</td><td><strong>电机 2 故障</strong>→ 硬件封锁 TIM8（电机 1 桥）；软件补封 TIM1</td></tr>
+    <tr><td>PC13</td><td>EXTI13（下降沿）</td><td>DRV8301-1 nOCTW</td><td>电机 1 过温/过流预警</td></tr>
+    <tr><td>PA4</td><td>EXTI4（下降沿）</td><td>DRV8301-2 nOCTW</td><td>电机 2 预警</td></tr>
+    <tr><td>PB10</td><td>DC_CAL（GPIO 输出，初始 <strong>Low</strong>）</td><td>两片 DRV8301 DC_CAL</td><td>拉高时 SO 输出 = REF 电平，读零点</td></tr>
+    <tr><td>PB9</td><td>TIM4_CH4（AF2）</td><td>泄放 MOSFET 栅极</td><td>母线能量耗散；外部 10k 下拉，初始占空比 0</td></tr>
+  </tbody>
+</table></div>
+
+<h3>电流采样</h3>
+<div class="tablewrap"><table>
+  <thead><tr><th>引脚</th><th>ADC 通道</th><th>信号</th><th>触发</th></tr></thead>
+  <tbody>
+    <tr><td>PA0 / PA1</td><td>ADC1_IN1 / IN2（注入组）</td><td>M1_IA / M1_IB（DRV8301-1 SO1/SO2）</td><td>TIM8_TRGO2（OC5REF）</td></tr>
+    <tr><td>PC0 / PC1</td><td>ADC2_IN6 / IN7（注入组）</td><td>M2_IA / M2_IB（DRV8301-2 SO1/SO2）</td><td>TIM1_TRGO2（OC5REF）</td></tr>
+    <tr><td>PC2</td><td>ADC1_IN8（规则组）</td><td>VBUS_SENSE（100k+10k 分压，满量程 36.3 V）</td><td>软件触发</td></tr>
+    <tr><td>PB0 / PB1</td><td>ADC1_IN15 / IN12（规则组）</td><td>电机 NTC ×2</td><td>软件触发</td></tr>
+    <tr><td>PC3</td><td>ADC2_IN9（规则组）</td><td>母线总电流（预留）</td><td>软件触发</td></tr>
+  </tbody>
+</table></div>
+<p class="muted">「两个 ADC 各管一个电机」是硬约束：一个 ADC 的注入组只能有一个触发源，不分开就无法让两路 FOC 各自与自己那路 PWM 同步。</p>
+
+<h3>SPI · 片选 · 通信 · 指示</h3>
+<div class="tablewrap"><table>
+  <thead><tr><th>引脚</th><th>信号</th><th>连接</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>PA5/PA6/PA7</td><td>SPI1_SCK/MISO/MOSI（AF5）</td><td>DRV8301-1 + MT6816-1 共用总线 1</td><td rowspan="2">两条总线各挂一片 DRV + 一片编码器，模式/速率运行时切换，见第 9 节</td></tr>
+    <tr><td>PB3/PB4/PB5</td><td>SPI3_SCK/MISO/MOSI（AF6）</td><td>DRV8301-2 + MT6816-2 共用总线 2</td></tr>
+    <tr><td>PC4 / PC5</td><td>nSCS1 / ENC1_CS（GPIO 输出，初始 <strong>High</strong>）</td><td>DRV8301-1 片选 / MT6816-1 片选</td><td>软件 NSS；低有效，复位期间不得选中</td></tr>
+    <tr><td>PB6 / PB7</td><td>nSCS2 / ENC2_CS（GPIO 输出，初始 <strong>High</strong>）</td><td>DRV8301-2 片选 / MT6816-2 片选</td><td>同上</td></tr>
+    <tr><td>PA11 / PA12</td><td>FDCAN1_RX / TX（AF9）</td><td>CAN 收发器（须 3.3 V 型号）</td><td>500 kbps 经典帧</td></tr>
+    <tr><td>PA2 / PA3</td><td>USART2_TX / RX（AF7）</td><td>USB-TTL 调试口</td><td>115200，日志/命令</td></tr>
+    <tr><td>PC9 / PB11 / PB12</td><td>LED_SYS / LED_DRV1 / LED_DRV2（GPIO 输出，初始 <strong>High</strong>）</td><td>LED 灌电流驱动</td><td><strong>低电平点亮</strong>；初始 High = 灭，程序没跑起来时不会被误认为正常</td></tr>
+    <tr><td>PF0 / PF1</td><td>OSC_IN / OSC_OUT</td><td>8 MHz 晶振</td><td>170 MHz 的基准</td></tr>
+    <tr><td>PA13 / PA14</td><td>SWDIO / SWCLK</td><td>SWD 调试口</td><td>保留</td></tr>
+    <tr><td>PC14 / PC15</td><td>—</td><td>LSE 晶振已焊但<strong>固件不启用</strong></td><td>RTC 方案已取消；VBAT 接 3.3 V 无电池</td></tr>
+  </tbody>
+</table></div>
+
+<!-- 3 -->
+<h2 id="baseline"><span class="n">3</span>CubeMX 基线（已配好，不用再动）</h2>
+<p>每张基线卡：<strong>配了什么 → 生成的代码形态 → 为什么</strong>。重新生成代码后这些都会保持，除非在 CubeMX 里改配置。</p>
+
+<h3 id="fw-clock">时钟树</h3>
+<div class="cfg">
+  <div class="cfg-head"><h4>RCC</h4><span class="who">main.c · SystemClock_Config()</span></div>
+  <dl>
+    <dt>HSE 8 MHz → PLLM /2 → PLLN ×85 → PLLR /2 → SYSCLK 170 MHz</dt>
+    <dd>PLL 输入 4 MHz 落在 2.66~16 MHz 内，VCO 340 MHz 在 96~344 MHz 内。HCLK / APB1 / APB2 均 /1。</dd>
+    <dt>PWR_REGULATOR_VOLTAGE_SCALE1_BOOST + FLASH_LATENCY_4</dt>
+    <dd><b>不切 Boost 跑不到 170 MHz</b>；漏配 Flash 等待周期会跑飞。两者都必须在 PLL 配置之前/之后按正确顺序执行（生成的代码已保证）。</dd>
+    <dt>CSS 使能</dt>
+    <dd>HSE 失效硬件自动切 HSI16，但系统时基降为 1/10——FOC 全部失准，必须在 RCC 中断里受控停机（第 6 节）。</dd>
+    <dt><code>HSE_VALUE = 8000000</code>（hal_conf.h）</dt>
+    <dd>G4 HAL 默认写的是 NUCLEO 的 24 MHz，不改则串口波特率、定时周期、HAL_Delay 全部偏 3 倍。已改好。</dd>
+  </dl>
+</div>
+<div class="judge"><b>判据</b>：<code>HAL_RCC_GetSysClockFreq()</code> 上电打印应为 170000000。这是骨架里第一个自检。</div>
+
+<h3>TIM1 / TIM8 —— 双电机 PWM 与 ADC 触发</h3>
+<div class="cfg">
+  <div class="cfg-head"><h4>TIM1（电机 2） / TIM8（电机 1）</h4><span class="who">tim.c · MX_TIM1_Init() / MX_TIM8_Init()</span></div>
+  <dl>
+    <dt>中心对齐 CENTERALIGNED1 · ARR = 4249 · PSC = 0 → <b>20 kHz</b></dt>
+    <dd>170 MHz / (4249+1) / 2 = 20 kHz。中心对齐是为了让「下桥全开窗口」以三角波顶点为中心——电流采样点就在那里。</dd>
+    <dt>CH1~CH3 初始 <code>Pulse = 0</code>，MOE 不开（HAL_TIM_PWM_Start 之前没有输出）</dt>
+    <dd>上电即 0% 占空比；六个 PWM 脚在 MOE=0 时由定时器拉低（OSSI/OSSR 已配 Disable，空闲上下桥全关）。</dd>
+    <dt>TRGO2 = <code>TIM_TRGO2_OC5REF</code> · CH5 无引脚 · <code>CCR5 = 4200</code></dt>
+    <dd><b>这是采样时刻的机关</b>：中心对齐下更新事件每周期出现<b>两次</b>（顶点与谷底），直接拿 UEV 当触发会采到谷底（三相上桥全开、低侧无电流）的假值。OC5REF 只在上数匹配 4200 时出一次上升沿——顶点前 49 个计数（≈0.29 µs），EPWM 窗口中部。<code>ADC1 ← TIM8_TRGO2、ADC2 ← TIM1_TRGO2</code> 已配好。</dd>
+    <dt>Break：极性 LOW（nFAULT 低有效）· 滤波 BKF=0011（8×fDTS ≈ 47 ns）· AOE = <b>Disable</b> · BKLOCK（LockLevel_3）· OSSI/OSSR = Disable</dt>
+    <dd>nFAULT 到封锁 PWM 约 100 ns，纯硬件、不经过代码。AOE 关掉是禁止故障后自动恢复；BKLOCK 锁存，恢复必须软件显式清。滤波档位刻意没用 fDTS 大分频（可达 µs 级，等于废掉刹车）。</dd>
+    <dt>死区 <code>DeadTime = 0</code></dt>
+    <dd>死区由 DRV8301 的 DTC 电阻承担（50~500 ns 可调）；TIM 侧再加会与其叠加，低速电流畸变。台架第 1 阶段用示波器实测总算账。</dd>
+  </dl>
+</div>
+<pre class="codeblk"><span class="c">/* 生成代码里的关键字段（tim.c，别手改，知道在哪就行） */</span>
+htim8.Init.CounterMode     = TIM_COUNTERMODE_CENTERALIGNED1;
+htim8.Init.Period          = 4249;                 <span class="c">/* 20 kHz */</span>
+sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_OC5REF;
+sBreakDeadTimeConfig.LockLevel      = TIM_LOCKLEVEL_3;
+sBreakDeadTimeConfig.BreakFilter    = 3;           <span class="c">/* BKF=0011 ≈47ns */</span>
+sBreakDeadTimeConfig.AutomaticOutput= TIM_AUTOMATICOUTPUT_DISABLE;</pre>
+
+<h3>ADC1 / ADC2 —— 注入测电流，规则测慢量</h3>
+<div class="cfg">
+  <div class="cfg-head"><h4>ADC1 ↔ 电机 1 · ADC2 ↔ 电机 2</h4><span class="who">adc.c · MX_ADC1_Init() / MX_ADC2_Init()</span></div>
+  <dl>
+    <dt>时钟：SYSCLK /4 → <b>42.5 MHz</b>（<code>ADC_CLOCK_SYNC_PCLK_DIV4</code>）</dt>
+    <dd>G4 双 ADC 同时工作时内核时钟上限 52 MHz——170 MHz 下 /4 是唯一合规档，/1、/2 都超。改时钟树时这条最容易连带损坏。</dd>
+    <dt>注入组：2 通道、采样 6.5 cycles、上升沿触发</dt>
+    <dd>6.5 + 12.5 = 19 cycles ≈ 0.45 µs/通道；两通道合计 ~0.9 µs，装进低侧窗口预算（总窗口约 2.5 µs @95% 调制比）。</dd>
+    <dt>规则组（ADC1）：IN8 VBUS → IN15 → IN12 → VREFINT（247.5 cycles）</dt>
+    <dd>软件触发、非连续。VREFINT 用来校正 VDDA 实际值（见第 10 节公式）——ADC 参考是 VDDA，磁珠后实际值有 ±1.5% 偏差，会进入每一个读数。</dd>
+    <dt>规则组（ADC2）：IN9（PC3，母线总电流预留）6.5 cycles</dt>
+    <dd>单通道。规则组与注入组并行；注入会抢占规则组，慢量读数被推迟没关系。</dd>
+  </dl>
+</div>
+<pre class="codeblk"><span class="c">/* 注入读取（中断里） */</span>
+uint16_t ia = HAL_ADCEx_InjectedGetValue(&amp;hadc1, ADC_INJECTED_RANK_1);
+uint16_t ib = HAL_ADCEx_InjectedGetValue(&amp;hadc1, ADC_INJECTED_RANK_2);
+<span class="c">/* 规则组轮询（主循环）：每个通道单独 Start/GetValue，或一次 Start 后按序读 */</span></pre>
+<div class="judge"><b>判据</b>：EN_GATE 高、DC_CAL 高时注入两通道读数应 ≈2048（1.65 V）；EN_GATE 低时 SO 不输出，读数无意义。</div>
+
+<h3 id="fw-comm">FDCAN1 —— 500 kbps 经典帧</h3>
+<div class="cfg">
+  <div class="cfg-head"><h4>FDCAN</h4><span class="who">fdcan.c · MX_FDCAN1_Init()</span></div>
+  <dl>
+    <dt>时钟源 HSE 直连 8 MHz · BRP=1 · TSEG1=12 · TSEG2=3</dt>
+    <dd>16 tq × 125 ns = 2 µs → 500 kbps，采样点 81.25%，全程整数分频，精度只取决于晶振。</dd>
+    <dt><code>FrameFormat = FDCAN_FRAME_CLASSIC</code> · <code>AutoRetransmission = ENABLE</code></dt>
+    <dd>全总线经典帧（ESP32 TWAI 不支持 FD）；自动重传开启，急停/控制帧不因一次仲裁失败静默丢失。</dd>
+    <dt>滤波器：<code>StdFiltersNbr = 0</code>（尚未配）</dt>
+    <dd>生成代码里没有滤波器配置——<b>骨架里必须自己配</b>：至少放行 0x001（急停）与 0x010（控制指令），其余丢弃。参考写法：<code>HAL_FDCAN_ConfigGlobalFilter()</code> 全局拒绝非匹配帧 + <code>HAL_FDCAN_ConfigFilter()</code> 加两条 ID 过滤，然后 <code>HAL_FDCAN_Start()</code> 与 <code>HAL_FDCAN_ActivateNotification()</code>。</dd>
+    <dt>中断优先级 3（低于 BRK=0、ADC=1、EXTI=2）</dt>
+    <dd>CAN 接收相对不实时——控制环路不能被 CAN 中断抢占太多。</dd>
+  </dl>
+</div>
+
+<h3>SPI1 / SPI3 —— 每条总线挂 DRV + 编码器</h3>
+<div class="cfg">
+  <div class="cfg-head"><h4>SPI1（电机 1 通道） / SPI3（电机 2 通道）</h4><span class="who">spi.c</span></div>
+  <dl>
+    <dt>Mode 3（CPOL=High / CPHA=2Edge）· /32 → <b>5.3125 MHz</b> · 8 bit · 软 NSS</dt>
+    <dd>静态配置的是<b>编码器常态档</b>（MT6816 为 Mode 3，SCK ≤10 MHz）。DRV8301 是 <b>Mode 1</b>（nSCS 拉低时 SCLK 必须为低、下降沿采样），且速率 1~5 MHz——访问 DRV 前必须<b>运行时切换</b> CR1（见下），用完切回。</dd>
+    <dt>切换序列（每次访问 DRV 前后）</dt>
+    <dd>等 BSY 清零 → <code>SPE=0</code> → 写 CR1（CPOL/CPHA/BR）→ <code>SPE=1</code>；切换时两片 CS 都必须为高。CS 全由 GPIO 控制（<code>NSS = SPI_NSS_SOFT</code>，SSM/SSI 已在生成代码里）。</dd>
+    <dt>HAL 视角</dt>
+    <dd>HAL_SPI_Init 会写死模式——切换要么改 <code>hspi1.Init.CLKPolarity/CLKPhase/BaudRatePrescaler</code> 后调 <code>HAL_SPI_Init()</code> 重初始化，要么直接写 <code>SPI1-&gt;CR1</code> 位（更快但绕过 HAL）。骨架建议封装 <code>spi_set_mode_drv()</code> / <code>spi_set_mode_enc()</code> 两个函数。</dd>
+  </dl>
+</div>
+
+<h3>USART2 · GPIO · NVIC</h3>
+<ul>
+  <li><strong>USART2 115200</strong>：调试日志 / 命令。<code>printf</code> 重定向（fputc）可选，注意别在中断里打大段日志。</li>
+  <li><strong>GPIO 初始电平已按「安全侧」配好</strong>：EN_GATE / DC_CAL=Low（关断），四片选 + 三 LED=High（不选中、灭）。<code>MX_GPIO_Init()</code> 执行完功率级就是关断态。</li>
+  <li><strong>NVIC 层次</strong>：TIM1_BRK / TIM8_BRK=0 → ADC1_2=1 → EXTI4 / EXTI15_10=2 → FDCAN1_IT0=3 → SysTick=15。BRK 最高是因为它只做「补封 + 拉 EN_GATE + 置标志」，必须最快。</li>
+</ul>
+
+<h3 id="iwdg">IWDG —— CubeMX 生成，启动延后到序列末</h3>
+<div class="cfg">
+  <div class="cfg-head"><h4>窗口看门狗</h4><span class="who">iwdg.c · MX_IWDG_Init()（不生成自动调用）</span></div>
+  <dl>
+    <dt>参数：LSI 32 kHz / 32 → 窗口 20~40 ms（Window=20 / Reload=40），喂狗取 30 ms 中段</dt>
+    <dd>窗口模式连「程序跑飞后仍定时喂狗」这类假活也能抓——喂早喂晚都复位。</dd>
+    <dt>核心机关：控制「谁在什么时候调 MX_IWDG_Init()」</dt>
+    <dd>G4 HAL 的 <code>HAL_IWDG_Init</code> 内部即写启动键（<code>__HAL_IWDG_START</code>），<b>Init 即启动、无独立 Start API</b>，CubeMX 面板也没有「只配置不启动」档——所以<b>调用时机就是狗上岗时机</b>。若让 <code>main()</code> 自动调用，上电序列（等 nFAULT + SPI 校验 + DC_CAL）超 40 ms 就被咬。</dd>
+    <dt>做法：Advanced Settings 取消 IWDG 的 Generate Function Call</dt>
+    <dd>CubeMX 里 IWDG 正常配 P32/W20/R40（生成 <code>iwdg.c/h</code>；<code>hal_conf</code> 宏与 uvprojx 注册都由 CubeMX 自动维护）；<b>Project Manager → Advanced Settings → IWDG 行取消勾选 Generate Function Call</b>——<code>main()</code> 不再自动调用，由你在序列末尾显式调用 <code>MX_IWDG_Init()</code>（第 5 节第 10 步）。该设置保存在 .ioc，重新生成持久生效。</dd>
+    <dd><b>唯一纪律</b>：勿把 Generate Function Call 勾回去——勾回即恢复「初始化即放狗」。</dd>
+  </dl>
+</div>
+
+<!-- 4 -->
+<h2 id="layout"><span class="n">4</span>代码组织建议</h2>
+<p>启动停止的边界：<code>main.c</code> 的 USER CODE 区只做「接线」，所有实现放 <code>code/</code>。这样 CubeMX 重新生成永远伤不到你的代码。</p>
+<pre class="codeblk">g431-drive/
+├── Core/ ...              <span class="c">CubeMX 生成，只在 USER CODE 区接线</span>
+├── code/                  <span class="c">你的全部代码（Keil 里已留空组）</span>
+│   ├── app_main.c/h       <span class="c">上电序列 app_init() + 主循环 app_main_loop()</span>
+│   ├── app_config.h       <span class="c">全部业务常量（频率、增益、阈值、引脚映射）</span>
+│   ├── protect.c/h        <span class="c">BKIN/EXTI/CSS 回调、软急停、故障标志</span>
+│   ├── watchdog.c/h       <span class="c">可选：包装 MX_IWDG_Init() 作序列末启动（第 3 节）</span>
+│   ├── drv8301.c/h        <span class="c">SPI 寄存器读写、上电配置、状态解析</span>
+│   ├── mt6816.c/h         <span class="c">编码器角度读取、校验</span>
+│   ├── spi_bus.c/h        <span class="c">总线仲裁与模式切换（DRV ↔ 编码器）</span>
+│   ├── motor.c/h          <span class="c">单电机的电流环状态：零点、角度、Iq 目标</span>
+│   ├── foc_transform.c/h  <span class="c">Clarke / Park / 反 Park（纯算法，无硬件依赖）</span>
+│   ├── svpwm.c/h          <span class="c">七段式 SVPWM → CCR 值</span>
+│   ├── foc_pi.c/h         <span class="c">d/q 电流 PI（附抗饱和）</span>
+│   ├── can_port.c/h       <span class="c">CAN 收发、指令解析、状态帧调度</span>
+│   └── brake_chopper.c/h  <span class="c">母线泄放滞环</span>
+└── MDK-ARM/ ...           <span class="c">Keil 工程（新文件要加进 code 组）</span></pre>
+<p class="muted">这不是强制结构——但「纯算法与硬件分离」值得保留：foc_transform / svpwm / foc_pi 不 include HAL，将来能在上位机仿真验证。</p>
+
+<!-- 5 -->
+<h2 id="seq"><span class="n">5</span>上电序列（app_init 逐步实现）</h2>
+<p>方案 3.2 第 7 条固化的顺序，<strong>不可换</strong>——每一步失败就停在该步，用 LED 慢闪报错，不上桥。这是「把硬件问题与控制问题分离」的固件侧对应物。</p>
+
+<ol class="steps">
+  <li><span class="t">复位原因记录</span>
+    <p>读 <code>RCC-&gt;CSR</code>：<code>IWDGRSTF</code> / <code>PORRSTF</code> / <code>SFTRSTF</code> / <code>PINRSTF</code>。要跨复位保留的写进备份寄存器：<code>HAL_PWR_EnableBkUpAccess()</code> 后写 <code>RTC-&gt;BKP0R</code>。然后清 <code>RCC-&gt;CSR</code>。</p>
+    <p><b>注意</b>：VBAT 接 3.3 V、无电池——BKP 只在同一电源周期内有效；掉电原因本身从 CSR 读即可，不需要 BKP。</p></li>
+  <li><span class="t">时钟自检</span>
+    <p><code>HAL_RCC_GetSysClockFreq() == 170000000</code>。不对就停——时钟不对跑 FOC 全是错的。</p></li>
+  <li><span class="t">ADC 校准</span>
+    <p>两路各做一次 <code>HAL_ADCEx_Calibration_Start(&amp;hadc1, ADC_SINGLE_ENDED)</code>，要在使能 ADC 之前、上电一次即可。规则组和注入组共用一次校准。</p></li>
+  <li><span class="t">调试冻结位</span>
+    <p><code>SET_BIT(DBGMCU-&gt;APB2FZ, DBGMCU_APB2FZ_DBG_TIM1_STOP | DBGMCU_APB2FZ_DBG_TIM8_STOP)</code>，再加 TIM4（泄放）与 IWDG（<code>DBGMCU-&gt;APB1FZR1</code> 对应位）。<b>不配的后果</b>：调试器一停 CPU，PWM 还在跑、电机突然转；单步超 40 ms 会被狗咬复位。</p>
+    <p>用代码配而不是 Keil 的 dbgconf——<code>DebugConfig/</code> 在 .gitignore 里，不入库。</p></li>
+  <li><span class="t">SPI 总线与电机结构初始化</span>
+    <p>两路片选置高；<code>spi_bus_init()</code> 设成编码器常态档（Mode 3 / 5.3 MHz）；电机状态清零（零点、Iq 目标、故障标志）。</p></li>
+  <li><span class="t">拉高 EN_GATE，等两片 nFAULT 释放</span>
+    <p><code>HAL_GPIO_WritePin(EN_GATE…)SET</code>，然后轮询 <code>GPIOA-&gt;IDR bit15</code> 与 <code>GPIOD-&gt;IDR bit2</code> 都为高。引脚是 AF 模式（BKIN），但 IDR 在 AF 输入下照样反映电平，直接读即可。超时（20~50 ms 量级）判失败。</p>
+    <p><b>为什么等</b>：EN_GATE 拉高后芯片约 5~10 ms SPI 才就绪；nFAULT 变高表示可接收 PWM。EN_GATE 低电平期间 SPI 不可用（内部稳压器休眠）。</p></li>
+  <li><span class="t">DRV8301 配置并读回校验</span>
+    <p>两片逐个：SPI 切 DRV 模式 → 写 CTRL1（<b>OC_MODE=锁存关断</b>、<b>增益 40 V/V</b>、6-PWM 模式、驱动电流）→ 写 CTRL2 → 读回比对 → 切回编码器模式。<b>先配再开 PWM，任何情况下不例外。</b>寄存器细节见第 8 节。</p></li>
+  <li><span class="t">DC_CAL 读零点</span>
+    <p>PB10 拉高 → 注入两通道读数应 ≈2048（±5% 起步）→ 存到电机结构 → PB10 拉低。</p>
+    <p><b>为什么此时能读</b>：DC_CAL 高时 SO 输出固定为 REF 电平（1.65 V）；<b>必须在 EN_GATE 之后</b>——EN_GATE 才使能采样放大器。偏离过多说明 DRV 或采样链有问题，停。</p>
+    <p>此时 MOE=0 无 PWM 输出，但 TIM 计数照跑、TRGO2 照常触发注入转换——零点读数不需要软件触发旁路。这要求 TIM 已经在跑（第 9 步前先 <code>HAL_TIM_Base_Start</code>）。</p></li>
+  <li><span class="t">启动计时与中断，保持待命</span>
+    <p>TIM1/TIM8 <code>HAL_TIM_PWM_Start</code>（MOE 仍 0，输出关）→ 使能 ADC 注入中断（<code>HAL_ADCEx_InjectedStart_IT</code>）→ 状态机停在 MOT_IDLE。电机只在收到 CAN 使能指令后才开环。</p></li>
+  <li><span class="t">最后：启动 IWDG</span>
+    <p>调用 <code>MX_IWDG_Init()</code>——CubeMX 生成在 <code>iwdg.c</code>：写 P32 / Window=20 / Reload=40 后调 <code>HAL_IWDG_Init</code>（内部即启动）。<b>它只在这里被调用，是因为 Advanced Settings 取消了它的 Generate Function Call</b>（第 3 节）。此后主循环每 30 ms 喂一次。</p></li>
+</ol>
+
+<div class="judge"><b>序列判据</b>：① 每步失败有独立的 LED 慢闪节拍（数闪烁次数定位步骤）；② 全程无复位（IWDG 未启动，不应被咬）；③ 结束时 EN_GATE 高、nFAULT 高、MOE=0、注入零点已存。</div>
+
+<!-- 6 -->
+<h2 id="protect"><span class="n">6</span>保护链</h2>
+<p><strong>保护链必须先于控制环写</strong>——它不依赖 FOC 的任何状态，写完就能验。</p>
+
+<h3>BKIN 中断：交叉映射（别凭直觉）</h3>
+<div class="tablewrap"><table>
+  <thead><tr><th>中断</th><th>来源</th><th>硬件已封锁</th><th>软件要做</th></tr></thead>
+  <tbody>
+    <tr><td><code>TIM1_BRK_TIM15_IRQHandler</code> → <code>HAL_TIMEx_BreakCallback(&amp;htim1)</code></td><td>PA15 ← DRV8301-1 nFAULT = <strong>电机 1 故障</strong></td><td>TIM1（电机 2 桥）</td><td>补封 TIM8 的 MOE（故障片自己的桥）、拉低 EN_GATE、置 <code>FAULT_M1_BKIN</code></td></tr>
+    <tr><td><code>TIM8_BRK_IRQHandler</code> → <code>HAL_TIMEx_BreakCallback(&amp;htim8)</code></td><td>PD2 ← DRV8301-2 nFAULT = <strong>电机 2 故障</strong></td><td>TIM8（电机 1 桥）</td><td>补封 TIM1、拉低 EN_GATE、置 <code>FAULT_M2_BKIN</code></td></tr>
+  </tbody>
+</table></div>
+<pre class="codeblk"><span class="c">/* 回调实现要点（因在中断上下文，只做三件事） */</span>
+void HAL_TIMEx_BreakCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim == &amp;htim1) {                    <span class="c">/* 电机1 故障 */</span>
+        __HAL_TIM_MOE_DISABLE(&amp;htim8);       <span class="c">/* 补封电机1自己的桥 */</span>
+        g_fault |= FAULT_M1_BKIN;
+    } else if (htim == &amp;htim8) {             <span class="c">/* 电机2 故障 */</span>
+        __HAL_TIM_MOE_DISABLE(&amp;htim1);
+        g_fault |= FAULT_M2_BKIN;
+    }
+    HAL_GPIO_WritePin(EN_GATE_PORT, EN_GATE_PIN, GPIO_PIN_RESET);
+    <span class="c">/* 不读 DRV 状态、不碰 SPI——诊断放主循环（总线与编码器共用） */</span>
+}</pre>
+
+<h3>nOCTW 与 CSS</h3>
+<ul>
+  <li><strong>EXTI</strong>（<code>HAL_GPIO_EXTI_Callback</code>）：<code>GPIO_PIN_13</code> → <code>FAULT_OTW1</code>（DRV8301-1）；<code>GPIO_PIN_4</code> → <code>FAULT_OTW2</code>。两片独立接入，中断即知哪片预警。</li>
+  <li><strong>CSS</strong>（<code>HAL_RCC_CSSCallback</code>）：时基已坏，直接走与软急停相同的终点——封 MOE + 拉 EN_GATE，置 <code>FAULT_CSS</code>，不尝试闭环。</li>
+  <li><strong>软急停</strong>（CAN 0x001，主循环解析）：同样「封 TIM1/TIM8 MOE + 拉 EN_GATE」，不走分级降级、不尝试保平衡。</li>
+</ul>
+
+<h3>故障恢复链（仅主循环做）</h3>
+<ol>
+  <li>读 <code>TIM1/TIM8</code> 的 BIF 并清除；</li>
+  <li>优先用 SPI 写 DRV 的 <code>GATE_RESET</code> 位清 DRV 故障（访问前后切总线模式；不扰动配置、绕开 EN_GATE 10~20 µs 复位禁区）。GVDD_OV 例外——只能 &gt;20 µs 的 EN_GATE 复位或断电；</li>
+  <li>确认 nFAULT 已释放；</li>
+  <li>（若期间经历完全复位则重写 DRV 配置）；</li>
+  <li>置 MOE 恢复输出。</li>
+</ol>
+<div class="pit">
+  <div class="sym"><span class="tag">坑</span>BKIN 中断里读 DRV 状态会把 SPI 拖进中断，与 20 kHz 电流环抢总线（编码器同一条线），直接导致控制环时序崩溃——诊断必须在主循环，用标志位排队。</div>
+</div>
+
+<!-- 7 -->
+<h2 id="foc"><span class="n">7</span>电流环与 FOC</h2>
+
+<h3>采样时机（已在硬件配好，理解即可）</h3>
+<p>中心对齐 + PWM1 时，三角波顶点处三相下桥全开，分流电阻上流过的才是真正的相电流。TRGO2（OC5REF @ CCR5=4200）在顶点前 0.29 µs 触发注入转换——ADC 采样（~0.45 µs ×2）恰落在顶点附近窗口中部。你在中断里读到的就是有效值，<strong>不用做任何时序处理</strong>。</p>
+
+<h3>电流换算</h3>
+<pre class="codeblk"><span class="c">/* 每 LSB 的电流（3.3V 参考） */</span>
+V_LSB  = VDDA_real / 4095;                <span class="c">/* ≈ 0.806 mV */</span>
+I_PER_LSB = V_LSB / (G × Rs)              <span class="c">/* G=40 V/V, Rs=0.25 mΩ → ≈ 0.081 A/LSB */</span>
+I_a = (raw_ia - I_zero_ia) * I_PER_LSB;    <span class="c">/* I_zero 来自 DC_CAL（≈2048） */</span>
+<span class="c">/* 满量程：对称约 ±135 A——负向受 SO 线性下限 0.3V 限制。小电流段精度差是预期的。 */</span></pre>
+
+<h3>变换与 SVPWM</h3>
+<ul>
+  <li><strong>Clarke</strong>（等幅值）：<code>iα = ia</code>，<code>iβ = (ia + 2·ib)/√3</code>（两相直接算，第三相 = −ia−ib）。</li>
+  <li><strong>Park</strong>：<code>id = iα·cosθ + iβ·sinθ</code>，<code>iq = −iα·sinθ + iβ·cosθ</code>，θ 为<strong>电角度 = 机械角 × 极对数</strong>。极对数未定（<code>M1_POLE_PAIRS</code>），开环旋转法实测后再写死。</li>
+  <li><strong>反 Park</strong>：<code>vα = vd·cosθ − vq·sinθ</code>，<code>vβ = vd·sinθ + vq·cosθ</code>。</li>
+  <li><strong>SVPWM</strong>：vα/vβ → 扇区与作用时间 → 三路占空比（七段式最常用）。输出 <code>CCR = duty × (ARR + 1)</code>；总线用中心对齐时直接写 <code>TIM1-&gt;CCR1..3</code> / <code>TIM8-&gt;CCR1..3</code>（预装载）。</li>
+  <li><strong>调制比限 0.93</strong>（方案 3.2 第 10 条）——20 kHz、95% 占空比时低侧窗口只有 2.5 µs，装不下采样链预算，台架扫定。</li>
+  <li><strong>PI 抗饱和</strong>：积分限幅到调制比上限对应电压；目标 Iq 来自 CAN 指令（力矩模式）或速度环输出（驱动模式由 ESP32 侧给）。</li>
+</ul>
+
+<h3>开环先行（M0 第一件事）</h3>
+<ol>
+  <li>固定电角度、给定固定 Vd/Vq → 电机应锁在固定位置（开环强拖）；</li>
+  <li>缓慢旋转电角度（1 Hz 起步）→ 电机应平滑旋转，记录编码器读数验方向与极对数；</li>
+  <li>方向错/极对数不对：现象是开环能转、闭环立刻发散。</li>
+</ol>
+
+<h3>注入中断里的循环</h3>
+<pre class="codeblk">void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
+{
+    <span class="c">/* 1. 读两路相电流（hadc 判 ADC1/ADC2，各管一个电机） */</span>
+    <span class="c">/* 2. 读编码器角度（SPI，凭存储的电角度） */</span>
+    <span class="c">/* 3. Clarke → Park → PI → 反 Park → SVPWM → 写 CCR */</span>
+    <span class="c">/* 4. 故障标志置位时：MOE 封锁、不输出 */</span>
+}</pre>
+<div class="pit">
+  <div class="sym"><span class="tag">坑</span>20 kHz 中断里绝对不能做 SPI 阻塞读编码器（~1.6 µs 帧 + 模式检查），更不能读 DRV。编码器角度要提前在主循环/更高层缓存好电角度；中断只做数学与写 CCR。</div>
+</div>
+
+<!-- 8 -->
+<h2 id="drv"><span class="n">8</span>DRV8301 驱动</h2>
+<ul>
+  <li><strong>帧格式</strong>：16 位 SPI 帧（bit15 = R/W，bit14~11 = 地址，bit10~0 = 数据）。<strong>读要两帧</strong>：第 N 帧发命令、第 N+1 帧收数据。</li>
+  <li><strong>必配项（CTRL1）</strong>：<code>OC_MODE = OC latch shut down</code>（默认逐周期限流不拉 nFAULT，BKIN 链会静默失效）、<code>OC_ADJ_SET</code> 按 RDS(on) × 跳闸电流查 SLOS719F Table 13、<b>增益 40 V/V</b>（默认 10，必须显式写）、<b>6-PWM 模式</b>、栅极驱动电流。</li>
+  <li><strong>CTRL2</strong>：OCP 分档等——按 SLOS719F 配置。</li>
+  <li><strong>读回校验</strong>：写完逐个寄存器读回比对，不一致判失败（自检环节，不可省）。</li>
+  <li><strong>状态读取</strong>：FAULT 状态位（OC 状态位读后自清——读到立即存入变量）；nOCTW 原因（OTW/OC）同样放主循环。</li>
+  <li><strong>访问纪律</strong>：每次访问前切 Mode 1、片选拉低、16 位帧、片选拉高、切回 Mode 3。两片 CS 在切换期间必须都为高。</li>
+</ul>
+
+<!-- 9 -->
+<h2 id="loop"><span class="n">9</span>CAN 与主循环</h2>
+
+<h3>CAN 收发（字段待 DBC，ID 已定）</h3>
+<div class="tablewrap"><table>
+  <thead><tr><th>ID</th><th>方向</th><th>内容</th><th>频率</th></tr></thead>
+  <tbody>
+    <tr><td><code>0x001</code></td><td>任意 → 全体</td><td>急停（最高优先级）——收到即封锁</td><td>事件</td></tr>
+    <tr><td><code>0x010</code></td><td>ESP32 → STM32</td><td>力矩 / 速度指令、使能、模式</td><td>200 ~ 500 Hz</td></tr>
+    <tr><td><code>0x100</code></td><td>STM32 → 全体</td><td>两电机转速 + Iq 合并帧（8 字节）</td><td>500 Hz</td></tr>
+    <tr><td><code>0x100/0x101</code></td><td>STM32 → 全体</td><td>母线电压、温度、故障（低频帧）</td><td>10 ~ 50 Hz</td></tr>
+  </tbody>
+</table></div>
+<p class="muted">帧字段布局、缩放、计数器均未定稿（DBC 待办，阻塞 M1 联调）——骨架先按「ID 路由 + 占位 payload」实现，字段表定稿后只改编解码层。</p>
+
+<h3>主循环编排（app_main_loop）</h3>
+<ol>
+  <li><strong>motor_poll</strong>：速度环/转速估计、编码器状态迁移；</li>
+  <li><strong>can_port_poll</strong>：状态帧上报调度（500 Hz 与低频帧）、指令断流检测（<b>超时行为未定义</b>——方案遗留，骨架只留回调，别拍脑袋实现）；</li>
+  <li><strong>规则组轮询</strong>：VBUS（经 VREFINT 校正）、NTC、母线总电流 → 更新全局量；</li>
+  <li><strong>brake_chopper_poll</strong>：泄放假环（VBUS &gt; V_brk 开通、低于回差关断；初期 bang-bang，确需 PWM 再用 10 kHz 档）；</li>
+  <li><strong>故障诊断</strong>：<code>g_fault</code> 非零时读 DRV 状态定位原因并上报；恢复走 GATE_RESET 链；</li>
+  <li><strong>LED 心跳</strong>：LED_SYS 500 ms 翻转；DRV1/2 按使能状态；</li>
+  <li><strong>喂狗</strong>：30 ms 中段（窗口 20~40 ms，喂早喂晚都复位）。</li>
+</ol>
+
+<!-- 10 -->
+<h2 id="numbers"><span class="n">10</span>数值速查卡</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>类别</th><th>数值</th><th>出处 / 备注</th></tr></thead>
+  <tbody>
+    <tr><td>系统时钟</td><td><code>170 MHz</code>（HSE 8M、PLL /2·85·/2）</td><td>Boot 模式 + Flash 4WS，已配</td></tr>
+    <tr><td>电流环 / PWM</td><td><code>20 kHz</code>（ARR 4249 中心对齐）</td><td>TRGO2 = OC5REF @ 4200</td></tr>
+    <tr><td>ADC 内核时钟</td><td><code>42.5 MHz</code>（SYSCLK/4）</td><td>双 ADC 上限 52 MHz</td></tr>
+    <tr><td>采样时间</td><td>注入 6.5 cycles（≈0.45 µs/通道）</td><td>规则组 92.5 / VREFINT 247.5</td></tr>
+    <tr><td>分流 / 增益</td><td><code>0.25 mΩ</code> 开尔文 · <code>40 V/V</code></td><td>满量程对称 ≈ ±135 A</td></tr>
+    <tr><td>电流换算</td><td>≈ <code>0.081 A/LSB</code>（VDDA=3.3 V）</td><td>零点 ≈ 2048（REF/2 = 1.65 V）</td></tr>
+    <tr><td>VDDA 校正</td><td><code>3.000 × VREFINT_CAL / VREFINT_meas</code></td><td>VREFINT_CAL @ 0x1FFF75AA</td></tr>
+    <tr><td>调制比</td><td><code>≤ 0.93</code></td><td>台架扫定，低侧窗口预算 2.5 µs</td></tr>
+    <tr><td>CAN</td><td><code>500 kbps</code> 经典帧，BRP=1/16tq</td><td>HSE 直连 8 MHz，自动重传开</td></tr>
+    <tr><td>IWDG</td><td>P32 / W20 / R40 → 20~40 ms 窗口</td><td>喂狗取 30 ms 中段；<code>MX_IWDG_Init()</code> 序列末显式调用</td></tr>
+    <tr><td>泄放</td><td>TIM4 10 kHz 档，PB9_CH4</td><td>滞环阈值待 TVS 定稿（占位 26/25 V）</td></tr>
+    <tr><td>母线量程</td><td>36.3 V（100k+10k 分压）</td><td>6S 满电 25.2 V + 回灌裕量</td></tr>
+    <tr><td>死区</td><td>TIM 侧 0（由 DTC 电阻承担 50~500 ns）</td><td>台架示波器实测</td></tr>
+  </tbody>
+</table></div>
+
+<!-- 11 -->
+<h2 id="pits"><span class="n">11</span>坑清单</h2>
+<div class="pit">
+  <div class="sym"><span class="tag">坑 1</span>PB15 配成 AF6（错）→ W 相下桥完全没有输出</div>
+  <div class="why"><span class="tag">机理</span>PB15 是 TIM1_CH3N 的 AF4 引脚（PB13/PB14 才是 AF6），极易配错</div>
+  <div class="fix"><span class="tag">对策</span>tim.c 里已确认 <code>GPIO_AF4_TIM1</code>（MspPostInit）；改代码前对照第 2 节引脚表</div>
+</div>
+<div class="pit">
+  <div class="sym"><span class="tag">坑 2</span>把 Generate Function Call 勾回去 → 初始化即放狗，上电序列中途被咬复位</div>
+  <div class="why"><span class="tag">机理</span>勾回后 <code>main()</code> 自动调用 <code>MX_IWDG_Init()</code>，而 <code>HAL_IWDG_Init</code> 内部即启动——狗在序列开始前就上岗</div>
+  <div class="fix"><span class="tag">对策</span>该勾选存于 .ioc、保持不勾；每次重新生成后 <code>grep MX_IWDG_Init main.c</code> 确认初始化序列里没有它</div>
+</div>
+<div class="pit">
+  <div class="sym"><span class="tag">坑 3</span>IWDG 在上电序列中复位循环</div>
+  <div class="why"><span class="tag">机理</span><code>HAL_IWDG_Init</code> 即启动；序列各步合计超 40 ms 就被咬</div>
+  <div class="fix"><span class="tag">对策</span><code>MX_IWDG_Init()</code> 只在序列末调用；序列中不喂狗也不该喂</div>
+</div>
+<div class="pit">
+  <div class="sym"><span class="tag">坑 4</span>Break 滤波配成 fDTS 大分频 → 刹车响应变几十 µs，等于废掉硬件保护</div>
+  <div class="why"><span class="tag">机理</span>BKF 档位与 fDTS 分频叠加，µs 级延迟让 100 ns 的设计目标落空</div>
+  <div class="fix"><span class="tag">对策</span>已配 BKF=0011（≈47 ns）；要改之前先算清楚 CKD 分频</div>
+</div>
+<div class="pit">
+  <div class="sym"><span class="tag">坑 5</span>DRV8301 复位脉冲落在 10~20 µs → 芯片失联，只能断电恢复</div>
+  <div class="why"><span class="tag">机理</span>PVDD1 欠压瞬态禁区（SLOS719F §7.3.4.2）</div>
+  <div class="fix"><span class="tag">对策</span>复位用 &lt;10 µs 或 &gt;20 µs；能用 SPI 的 <code>GATE_RESET</code> 就不用 EN_GATE 复位</div>
+</div>
+<div class="pit">
+  <div class="sym"><span class="tag">坑 6</span>DC_CAL 在 EN_GATE 拉高前做 → 零点全是垃圾</div>
+  <div class="why"><span class="tag">机理</span>EN_GATE 同时使能采样放大器；低电平期间 SO 不输出</div>
+  <div class="fix"><span class="tag">对策</span>序列固化：EN_GATE → 等 nFAULT → DC_CAL</div>
+</div>
+<div class="pit">
+  <div class="sym"><span class="tag">坑 7</span>DRV 寄存器写 40 V/V 前先开了 PWM</div>
+  <div class="why"><span class="tag">机理</span>默认增益 10 V/V、默认 OCP 是逐周期限流；未配的 DRV 上桥等于保护链裸奔</div>
+  <div class="fix"><span class="tag">对策</span>先配 CTRL1/2 并读回校验，再置 MOE。此顺序写入方案 3.2 第 7 条</div>
+</div>
+<div class="pit">
+  <div class="sym"><span class="tag">坑 8</span>拿小电流段的精度差当电流环故障</div>
+  <div class="why"><span class="tag">机理</span>0.25 mΩ × 40 V/V 下 1 A 只有 10 mV，噪声占比大——是分流方案的预期行为</div>
+  <div class="fix"><span class="tag">对策</span>只在 &gt;10 A 段评估电流环；小电流段的问题交给外环</div>
+</div>
+<div class="pit">
+  <div class="sym"><span class="tag">坑 9</span>调试器停 CPU 时电机突然转</div>
+  <div class="why"><span class="tag">机理</span>定时器不随 CPU 暂停；BKIN 只封 MOE，不封计数器</div>
+  <div class="fix"><span class="tag">对策</span>DBGMCU freeze 位（第 5 节第 4 步）必须配，走代码不走 dbgconf</div>
+</div>
+<div class="pit">
+  <div class="sym"><span class="tag">坑 10</span>中心对齐下 UEV 一周期触发两次注入采样</div>
+  <div class="why"><span class="tag">机理</span>溢出与下溢都产生 UEV；谷底采到的是三相全上桥的偏置假值</div>
+  <div class="fix"><span class="tag">对策</span>已用 TRGO2 = OC5REF 方案（第 3 节）；不要改回 UEV 触发</div>
+</div>
+
+<!-- 12 -->
+<h2 id="bench"><span class="n">12</span>台架验证路线</h2>
+<p>参数文档 3.4 的五阶段，固件对应物：</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>阶段</th><th>硬件状态</th><th>固件验什么</th></tr></thead>
+  <tbody>
+    <tr><td>0</td><td>只焊 MCU + 电源</td><td>时钟自检打印 170 MHz、SWD 通、CAN 通（收发环回）、LED 心跳</td></tr>
+    <tr><td>1</td><td>焊 DRV8301，<b>不焊 MOSFET</b></td><td>六路 PWM 波形 + 死区（示波器）、EN_GATE 时序、nFAULT 读取、DRV 配置读回校验</td></tr>
+    <tr><td>2</td><td>焊 MOSFET + 分流，<b>限流电源 24 V/1 A</b> 带小电机空转</td><td>开环旋转：换相方向、编码器极性/极对数、电流采样符号与零点（DC_CAL ≈2048）</td></tr>
+    <tr><td>3</td><td>上台架，电流 10→30→60→100 A 逐级升</td><td>电流环带宽与跟踪、VDS 过流阈值、分流电阻温升、100 A 尖峰波形</td></tr>
+    <tr><td>4</td><td>才接真飞轮</td><td>满工况、母线回灌电压抬升、泄放回路响应与电阻温升</td></tr>
+  </tbody>
+</table></div>
+<div class="judge"><b>示波器固定看点</b>：① 下桥驱动与 ADC 注入触发（TRGO2）落点——必须在低侧窗口中部；② 死区实测（DRV 输出侧）；③ nFAULT 拉低到六路 PWM 封锁的延迟（≈100 ns 量级）。</div>
+
+<footer>
+  <p>依据：<code>docs/天鹅座-技术方案.md</code>（唯一事实源）· <code>docs/天鹅座-参数与配置.md</code>（3.1~3.5、4.5）· <code>docs/天鹅座-STM32G431RBT6_双电机FOC设计方案.md</code>（引脚/时钟/硬件）· <code>g431-drive/CLAUDE.md</code>（改动禁区）· 当前 CubeMX 生成代码（基线核对于 2026-11-21，UV4 编译 0 错 0 警）。</p>
+  <p>冲突时以仓库文档为准；帧字段、极对数、泄放阈值等标注「待定」的数值不要自行拍板——先定文档。</p>
+</footer>
+
+</main>
+</div>
+
+<script>
+(function () {
+  var btn = document.getElementById("themeBtn");
+  var root = document.documentElement;
+  function current() {
+    var t = root.getAttribute("data-theme");
+    if (t) return t;
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  btn.addEventListener("click", function () {
+    var next = current() === "dark" ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("g431-guide-theme", next); } catch (e) {}
+  });
+
+  var links = Array.prototype.slice.call(document.querySelectorAll(".toc a"));
+  var map = {};
+  links.forEach(function (a) {
+    var id = a.getAttribute("href").slice(1);
+    var el = document.getElementById(id);
+    if (el) map[id] = a;
+  });
+  if ("IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        var a = map[en.target.id];
+        if (!a) return;
+        if (en.isIntersecting) {
+          links.forEach(function (x) { x.classList.remove("on"); });
+          a.classList.add("on");
+        }
+      });
+    }, { rootMargin: "-15% 0px -70% 0px" });
+    Object.keys(map).forEach(function (id) { io.observe(document.getElementById(id)); });
+  }
+})();
+</script>
+</body>
+</html>
