@@ -65,8 +65,8 @@ static void reset_cause_print(void)
 void app_init(void)
 {
     uart_init();
+    protect_init(); /* freeze 位先于放狗配置：断点下 IWDG 不咬，现场完整 */
     reset_cause_print();
-
     /* 放狗即启动（HAL_IWDG_Init 内部写启动键，无独立 Start API）——
        必须是序列末：此处调用时刻 = 看门狗开始倒数时刻（约定见端级
        CLAUDE.md，MX_IWDG_Init 不进 main.c 正是为守住这一行） */
