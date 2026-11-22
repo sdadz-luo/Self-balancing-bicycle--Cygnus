@@ -733,7 +733,7 @@ I_a = (raw_ia - I_zero_ia) * I_PER_LSB;    <span class="c">/* I_zero 来自 DC_C
 <h3>主循环编排（app_main_loop）</h3>
 <ol>
   <li><strong>motor_poll</strong>：速度环/转速估计、编码器状态迁移；</li>
-  <li><strong>can_port_poll</strong>：状态帧上报调度（500 Hz 与低频帧）、指令断流检测（<b>超时行为未定义</b>——方案遗留，骨架只留回调，别拍脑袋实现）；</li>
+  <li><strong>can_port_poll</strong>：状态帧上报调度（500 Hz 与低频帧）、指令断流检测（已定：<b>超时 100 ms 关断三相桥</b>，2026-11-22 拍板，见技术方案「RDK 断链行为」；恢复路径待定，实装挂 M1 联调前）；</li>
   <li><strong>规则组轮询</strong>：VBUS（经 VREFINT 校正）、NTC、母线总电流 → 更新全局量；</li>
   <li><strong>brake_chopper_poll</strong>：泄放假环（VBUS &gt; V_brk 开通、低于回差关断；初期 bang-bang，确需 PWM 再用 10 kHz 档）；</li>
   <li><strong>故障诊断</strong>：<code>g_fault</code> 非零时读 DRV 状态定位原因并上报；恢复走 GATE_RESET 链；</li>
