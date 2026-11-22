@@ -114,6 +114,9 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+
+    app_main(); /* 统一主循环入口：各模块主循环在此聚合，各 .c 只调用本函数（约定见端级 CLAUDE.md） */
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
