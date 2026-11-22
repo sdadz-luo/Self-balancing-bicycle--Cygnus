@@ -1,12 +1,27 @@
 # g431-drive —— 电驱（STM32G431RBT6）工作约定
 
 双电机 FOC 固件：动量轮走力矩环（指令来自 ESP32 平衡环）、摩擦驱动走速度环。
-工程尚未建立；建立后沿用 CubeMX 标准布局（`Core/` `Drivers/` `MDK-ARM/` +
-`*.ioc`），**不手工整理这些目录**——CubeMX 重新生成会打乱。
+工程基线已入库（f634ac2），布局沿用 CubeMX 标准结构（`Core/` `Drivers/`
+`MDK-ARM/` + `*.ioc`），**不手工整理这些目录**——CubeMX 重新生成会打乱。
 
 ## 构建
 
 Keil MDK5 打开 `MDK-ARM/*.uvprojx`；改 `.ioc` 后用 CubeMX 重新生成代码。
+
+## code/ 自写代码骨架
+
+固件自写代码在 [code/](code/)，独立于 CubeMX 生成目录，Keil 工程 `code`
+组已注册全部文件；**新增文件要同步挂进 `*.uvprojx`**，否则不参与编译。
+
+- **include 统一走 [code/headline.h](code/headline.h)**（聚合头）：各模块
+  `.h` 汇入它，各 `.c` 只 include 这一个头
+- **应用代码写 [code/app.c](code/app.c)**：初始化序列 + 主循环，由
+  `main()` 调用；`main.c` 只留 CubeMX 生成的 `MX_*_Init` 与对 app 的调用
+- **protect.c/h 承载保护类逻辑**：freeze 位配置（`protect_init`，设计方案
+  3.2 第 5 条）+ CSS 受控停机（3.2 第 2 条）
+- 其余模块一文件一职责、成对 `.c/.h`：spi / drv8301 / mt6816（驱动层），
+  pid / svpwm / foc / motor（算法层），can / isr（中断集中）/
+  brake_chopper（母线泄放）
 
 ## 改动禁区（改了会牵连别处）
 
