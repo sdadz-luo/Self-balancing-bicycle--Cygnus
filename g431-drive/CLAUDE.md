@@ -22,6 +22,10 @@ Keil MDK5 打开 `MDK-ARM/*.uvprojx`；改 `.ioc` 后用 CubeMX 重新生成代�
 - 其余模块一文件一职责、成对 `.c/.h`：spi / drv8301 / mt6816 / uart（驱动层），
   pid / svpwm / foc / motor（算法层），vofa（VOFA 波形组帧，协议层），
   can / isr（中断集中）/ brake_chopper（母线泄放）
+- **printf 只在主循环上下文用**：fputc 是攒行缓冲，行尾必须带 `\n` 否则
+  积压不发；ISR 里发数据一律走 `uart_send_bytes` / `uart_send_wave`。
+  工程已勾 **Use MicroLIB**（uvprojx `useUlib=1`）——printf 走 fputc 全靠
+  它；重配工程时丢了这个勾，标准库半主机依赖会撞链接错误
 
 ## 改动禁区（改了会牵连别处）
 
