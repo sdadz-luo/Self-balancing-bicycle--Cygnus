@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "adc.h"
+#include "dma.h"
 #include "fdcan.h"
 #include "spi.h"
 #include "tim.h"
@@ -27,6 +28,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+
+#include "headline.h" /* 统一 include 入口：HAL、标准库与全部模块头在此聚合，各 .c 只 include 本头文件（约定见端级 CLAUDE.md） */
 
 /* USER CODE END Includes */
 
@@ -91,6 +94,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_TIM1_Init();
   MX_ADC1_Init();
   MX_ADC2_Init();
@@ -101,6 +105,8 @@ int main(void)
   MX_SPI1_Init();
   MX_SPI3_Init();
   /* USER CODE BEGIN 2 */
+
+  app_init(); /* 统一初始化入口：各模块初始化在此聚合，各 .c 只调用本函数（约定见端级 CLAUDE.md） */
 
   /* USER CODE END 2 */
 
