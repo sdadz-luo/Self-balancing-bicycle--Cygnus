@@ -196,7 +196,14 @@ void uart_on_error(void)
      * 错误路径仍会 abort 接收——这里整体重启一次保证接收链永远
      * 活着；若接收本就正常，重复启动被 HAL 拒绝，幂等无害 */
     __disable_irq();
-    (void)HAL_UARTEx_ReceiveToIdle_DMA(&huart2, rx_dma_buf, UART_RX_DMA_SIZE);
+    if (HAL_UARTEx_ReceiveToIdle_DMA(&huart2, rx_dma_buf, UART_RX_DMA_SIZE) == HAL_OK)
+    {
+        /* 重启成功才复位提取游标：DMA 从缓冲头重新写，若沿用旧
+           rx_last_pos，下一个 RxEvent 会把两游标间的缓冲残留整段
+           灌进命令队列（垃圾字节）；重启被拒（接收未死，HAL_BUSY）
+           则游标本就连续，复位反而制造同样的失配 */
+        rx_last_pos = 0U;
+    }
     __enable_irq();
 }
 

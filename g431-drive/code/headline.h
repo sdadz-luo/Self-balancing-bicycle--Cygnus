@@ -33,7 +33,7 @@
 #include "spi.h"           /* SPI 总线（双 DRV8301 + 双 MT6816 片选管理） */ // IWYU pragma: export
 #include "drv8301.h"       /* 栅极驱动寄存器配置与故障读取 */ // IWYU pragma: export
 #include "mt6816.h"        /* 磁编码器角度读取 */ // IWYU pragma: export
-#include "uart.h"         /* 调试串口（USART2，PA2/PA3）：printf 重定向 + 阻塞发送 */ // IWYU pragma: export
+#include "uart.h"         /* 调试串口（USART2，PA2/PA3）：printf 重定向 + TX 环形队列 + DMA 链式发送 */ // IWYU pragma: export
 #include "vofa.h"         /* VOFA JustFloat 组帧（调试波形通道，经 uart 发送） */ // IWYU pragma: export
 
 /* ---- 算法层 ---- */

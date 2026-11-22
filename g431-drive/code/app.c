@@ -62,6 +62,10 @@ static void reset_cause_print(void)
     __HAL_RCC_CLEAR_RESET_FLAGS();
 }
 
+/* 上次喂狗 tick：文件级是因为初值必须在 app_init 放狗后锚定，
+   不能靠静态零初值（机理见 app_init 内锚定处注释） */
+static uint32_t dog_ms;
+
 void app_init(void)
 {
     uart_init();
@@ -71,11 +75,15 @@ void app_init(void)
        必须是序列末：此处调用时刻 = 看门狗开始倒数时刻（约定见端级
        CLAUDE.md，MX_IWDG_Init 不进 main.c 正是为守住这一行） */
     MX_IWDG_Init();
+    /* 首喂基准锚定到放狗时刻：窗口判据是「狗上岗后 20 ms 内喂狗即
+       复位」（WINR=20）。零初值会让首喂死在 tick=30 的绝对时刻——
+       上电序列一旦超 10 ms（功率阶段等 nFAULT 就绪要 20~50 ms），
+       首喂间隔不足 20 ms，上电即窗口违例、复位循环 */
+    dog_ms = HAL_GetTick();
 }
 
 void app_main(void)
 {
-    static uint32_t dog_ms; /* 上次喂狗 tick */
     uint32_t now = HAL_GetTick();
 
     /* 30ms 窗口中段喂狗：窗口 20~40ms，两侧各 10ms 余量，LSI 的
