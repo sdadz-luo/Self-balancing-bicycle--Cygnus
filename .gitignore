@@ -27,6 +27,8 @@ JLinkSettings.ini
 *.lst
 *.htm
 *.bak
+# UV4 命令行构建日志（-o 输出）
+build_verify.log
 
 # ===== ESP-IDF（esp32s3-control）=====
 # 保留 sdkconfig / sdkconfig.defaults / dependencies.lock

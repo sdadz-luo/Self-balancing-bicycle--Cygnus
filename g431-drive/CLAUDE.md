@@ -20,7 +20,7 @@ Keil MDK5 打开 `MDK-ARM/*.uvprojx`；改 `.ioc` 后用 CubeMX 重新生成代�
   `main()` 调用；`main.c` 只留 CubeMX 生成的 `MX_*_Init` 与对 app 的调用
 - **protect.c/h 承载保护类逻辑**：freeze 位配置（`protect_init`，设计方案
   3.2 第 5 条）+ CSS 受控停机（3.2 第 2 条）
-- 其余模块一文件一职责、成对 `.c/.h`：spi / drv8301 / mt6816 / uart（驱动层），
+- 其余模块一文件一职责、成对 `.c/.h`：adc / spi / drv8301 / mt6816 / uart（驱动层），
   pid / svpwm / foc / motor（算法层），vofa（VOFA 波形组帧，协议层），
   can / isr（中断集中）/ brake_chopper（母线泄放）
 - **printf 只在主循环上下文用**：fputc 是攒行缓冲，行尾必须带 `\n` 否则

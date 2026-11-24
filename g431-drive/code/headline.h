@@ -20,16 +20,17 @@
 
 /* ---- CubeMX 生成外设头（取 HAL 实例句柄的 extern 声明） ---- */
 #include "tim.h"     /* htim1 / htim4 / htim8：双电机 PWM 与母线泄放 */ // IWYU pragma: export
-#include "adc.h"     /* hadc1 / hadc2：相电流采样 */ // IWYU pragma: export
 #include "fdcan.h"   /* hfdcan1：CAN 通信 */ // IWYU pragma: export
 #include "usart.h"   /* huart2：调试串口 */ // IWYU pragma: export
 #include "iwdg.h"    /* hiwdg：窗口看门狗 */ // IWYU pragma: export
 /* gpio.h 不列：无句柄，GPIO 操作的 API 与宏全在 HAL 主头；
    stm32g4xx_it.h 不列：中断函数不需要原型对外发布；
-   Core/Inc/spi.h 不列：与 code/spi.h 同名、按名 include 永远命中
-   同目录这份，hspi1 / hspi3 的 extern 改在 code/spi.h 里直接声明 */
+   Core/Inc/spi.h 与 Core/Inc/adc.h 不列：与 code/ 下同名文件冲突、
+   按名 include 永远命中同目录这份，hspi1/hspi3、hadc1/hadc2 的 extern
+   改在 code/spi.c、code/adc.c（唯一使用处）里直接声明 */
 
 /* ---- 驱动层 ---- */
+#include "adc.h"           /* ADC 封装（校准、注入组相电流、母线电压） */ // IWYU pragma: export
 #include "spi.h"           /* SPI 总线（双 DRV8301 + 双 MT6816 片选管理） */ // IWYU pragma: export
 #include "drv8301.h"       /* 栅极驱动寄存器配置与故障读取 */ // IWYU pragma: export
 #include "mt6816.h"        /* 磁编码器角度读取 */ // IWYU pragma: export
