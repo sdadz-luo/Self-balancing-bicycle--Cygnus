@@ -21,10 +21,10 @@ extern ADC_HandleTypeDef hadc2; /* 电机 2：M2_IA/M2_IB（PC0/PC1，注入组�
 #define ADC_VREFINT_CAL_ADDR ((const uint16_t *)0x1FFF75AAUL)
 #define ADC_VREFINT_CAL_MV   3000U
 
-/* 母线分压 34.6k + 4.99k（实物原理图）：V_bus = V_adc × (34.6+4.99)/4.99，
-   满量程 ≈26.2 V（参数与配置 3.2） */
-#define ADC_VBUS_DIV_HIGH_KOHM 34.6f
-#define ADC_VBUS_DIV_LOW_KOHM  4.99f
+/* 母线分压 240k + 33k（实物原理图，2026-11-24 核对）：
+   V_bus = V_adc × (240+33)/33，满量程 ≈27.5 V（参数与配置 3.2） */
+#define ADC_VBUS_DIV_HIGH_KOHM 240.0f
+#define ADC_VBUS_DIV_LOW_KOHM  33.0f
 
 /* 规则组一次转换，按 rank 顺序返回 VBUS/NTC1/NTC2/VREFINT 原始码 */
 static bool adc_reg_read(uint16_t raw[4])

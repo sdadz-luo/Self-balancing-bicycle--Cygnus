@@ -94,22 +94,63 @@ static void reset_cause_print(void)
     __HAL_RCC_CLEAR_RESET_FLAGS();
 }
 
-/* ADC 采样自检（交接文档 2026-11-23）：用软件替代万用表——
-   VBUS 对照限流源、四路 SO 与 DC_CAL 零点、两片 DRV 状态。
-   数值异常只打印不阻塞（阶段 0/1 不接母线时 VBUS=0 属正常），
-   只有 HAL 超时（采样链路硬故障）才停机。
-   须在 EN_GATE 拉高、PWM 未开时调用（设计方案 3.2 第 7 条） */
-static void app_adc_selftest(void)
+/* 母线电压先读（不依赖 EN_GATE）：无电池时也能核对采样链路。
+   数值异常只打印，不做判据；只有 HAL 超时才停机 */
+static void app_vbus_probe(void)
 {
     float    vbus_v  = 0.0f;
     uint32_t vdda_mv = 0U;
-    uint16_t so[ADC_SO_COUNT] = {0};
-    uint16_t dc[ADC_SO_COUNT] = {0};
 
     if (!adc_vbus_read(&vbus_v, &vdda_mv))
     {
         app_fatal(5U);
     }
+
+    /* 整数 mV 打印：不引入 MicroLIB 浮点 printf */
+    printf("adc: vdda=%lumV vbus=%lumV\r\n",
+           (unsigned long)vdda_mv,
+           (unsigned long)((uint32_t)(vbus_v * 1000.0f + 0.5f)));
+}
+
+/* nFAULT 未释放时的降级判据：DRV8301 无 PVDD 时 GVDD 欠压会把 nFAULT
+   拉低，这是芯片保护而非故障。仅当两片状态都是「至少一个欠压位、
+   无 OC/OTSD/OTW、无 GVDD_OV」时才放行；SPI 不通也算不放行。
+   真实故障（过流/过温/栅极过压）仍然停机，安全检查不被削弱 */
+static bool app_drv_uv_only(void)
+{
+    for (uint8_t dev = (uint8_t)DRV_DEV_1; dev < (uint8_t)DRV_DEV_COUNT; dev++)
+    {
+        DrvStatus st = {0};
+        uint16_t  uv;
+
+        if (!drv8301_status((DrvDev)dev, &st))
+        {
+            return false;
+        }
+
+        uv = st.status1 & (DRV_ST1_GVDD_UV | DRV_ST1_PVDD_UV);
+        if ((uv == 0U) ||
+            ((st.status1 & ~(DRV_ST1_FAULT | DRV_ST1_GVDD_UV | DRV_ST1_PVDD_UV)) != 0U) ||
+            ((st.status2 & DRV_ST2_GVDD_OV) != 0U))
+        {
+            return false;
+        }
+        printf("drv%u: nFAULT low, st1=%04X st2=%04X (bus uv)\r\n",
+               (unsigned int)(dev + 1U),
+               (unsigned int)st.status1,
+               (unsigned int)st.status2);
+    }
+    return true;
+}
+
+/* ADC 采样自检：四路 SO 与 DC_CAL 零点、两片 DRV 状态。
+   数值异常只打印不阻塞，只有 HAL 超时（采样链路硬故障）才停机。
+   须在 EN_GATE 拉高、PWM 未开时调用（设计方案 3.2 第 7 条） */
+static void app_adc_selftest(void)
+{
+    uint16_t so[ADC_SO_COUNT] = {0};
+    uint16_t dc[ADC_SO_COUNT] = {0};
+
     if (!adc_phase_offset_read(so))
     {
         app_fatal(5U);
@@ -119,10 +160,6 @@ static void app_adc_selftest(void)
         app_fatal(5U);
     }
 
-    /* 整数 mV / 原始码打印：不引入 MicroLIB 浮点 printf */
-    printf("adc: vdda=%lumV vbus=%lumV\r\n",
-           (unsigned long)vdda_mv,
-           (unsigned long)((uint32_t)(vbus_v * 1000.0f + 0.5f)));
     printf("adc: so=%u %u %u %u\r\n",
            (unsigned int)so[ADC_SO_M1_IA], (unsigned int)so[ADC_SO_M1_IB],
            (unsigned int)so[ADC_SO_M2_IA], (unsigned int)so[ADC_SO_M2_IB]);
@@ -168,6 +205,9 @@ void app_init(void)
         app_fatal(2U);
     }
 
+    /* 母线电压先读：不依赖功率级，无电池时也能看到采样链路读数 */
+    app_vbus_probe();
+
     /* SPI 总线：四路 CS 拉高、两条总线置编码器常态档 */
     spi_bus_init();
 
@@ -177,7 +217,14 @@ void app_init(void)
     drv8301_enable();
     if (!drv8301_wait_ready(APP_DRV_READY_TIMEOUT_MS))
     {
-        app_fatal(3U);
+        /* 无母线时 GVDD 欠压会让 nFAULT 一直为低（芯片保护）。只在
+           两片都只有欠压位时放行，让无母线的 SPI/ADC 开发不被挡住；
+           其余故障仍按原序列停机 */
+        if (!app_drv_uv_only())
+        {
+            app_fatal(3U);
+        }
+        printf("warn: bus undervoltage, continue without power stage\r\n");
     }
     for (uint8_t dev = (uint8_t)DRV_DEV_1; dev < (uint8_t)DRV_DEV_COUNT; dev++)
     {

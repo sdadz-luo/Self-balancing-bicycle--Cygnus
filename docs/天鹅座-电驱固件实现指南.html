@@ -424,7 +424,7 @@ footer code { color: var(--ink); }
   <tbody>
     <tr><td>PA0 / PA1</td><td>ADC1_IN1 / IN2（注入组）</td><td>M1_IA / M1_IB（DRV8301-1 SO1/SO2）</td><td>TIM8_TRGO2（OC5REF）</td></tr>
     <tr><td>PC0 / PC1</td><td>ADC2_IN6 / IN7（注入组）</td><td>M2_IA / M2_IB（DRV8301-2 SO1/SO2）</td><td>TIM1_TRGO2（OC5REF）</td></tr>
-    <tr><td>PC2</td><td>ADC1_IN8（规则组）</td><td>VBUS_SENSE（100k+10k 分压，满量程 36.3 V）</td><td>软件触发</td></tr>
+    <tr><td>PC2</td><td>ADC1_IN8（规则组）</td><td>VBUS_SENSE（240k+33k 分压，满量程 27.5 V）</td><td>软件触发</td></tr>
     <tr><td>PB0 / PB1</td><td>ADC1_IN15 / IN12（规则组）</td><td>电机 NTC ×2</td><td>软件触发</td></tr>
     <tr><td>PC3</td><td>ADC2_IN9（规则组）</td><td>母线总电流（预留）</td><td>软件触发</td></tr>
   </tbody>
@@ -604,7 +604,7 @@ uint16_t ib = HAL_ADCEx_InjectedGetValue(&amp;hadc1, ADC_INJECTED_RANK_2);
     <p><code>HAL_GPIO_WritePin(EN_GATE…)SET</code>，然后轮询 <code>GPIOA-&gt;IDR bit15</code> 与 <code>GPIOD-&gt;IDR bit2</code> 都为高。引脚是 AF 模式（BKIN），但 IDR 在 AF 输入下照样反映电平，直接读即可。超时（20~50 ms 量级）判失败。</p>
     <p><b>为什么等</b>：EN_GATE 拉高后芯片约 5~10 ms SPI 才就绪；nFAULT 变高表示可接收 PWM。EN_GATE 低电平期间 SPI 不可用（内部稳压器休眠）。</p></li>
   <li><span class="t">DRV8301 配置并读回校验</span>
-    <p>两片逐个：SPI 切 DRV 模式 → 写 CTRL1（<b>OC_MODE=锁存关断</b>、<b>增益 40 V/V</b>、6-PWM 模式、驱动电流）→ 写 CTRL2 → 读回比对 → 切回编码器模式。<b>先配再开 PWM，任何情况下不例外。</b>寄存器细节见第 8 节。</p></li>
+    <p>两片逐个：SPI 切 DRV 模式 → 写 CTRL1（<b>OC_MODE=锁存关断</b>、<b>增益 10 V/V</b>、6-PWM 模式、驱动电流）→ 写 CTRL2 → 读回比对 → 切回编码器模式。<b>先配再开 PWM，任何情况下不例外。</b>寄存器细节见第 8 节。</p></li>
   <li><span class="t">DC_CAL 读零点</span>
     <p>PB10 拉高 → 注入两通道读数应 ≈2048（±5% 起步）→ 存到电机结构 → PB10 拉低。</p>
     <p><b>为什么此时能读</b>：DC_CAL 高时 SO 输出固定为 REF 电平（1.65 V）；<b>必须在 EN_GATE 之后</b>——EN_GATE 才使能采样放大器。偏离过多说明 DRV 或采样链有问题，停。</p>
@@ -671,7 +671,7 @@ void HAL_TIMEx_BreakCallback(TIM_HandleTypeDef *htim)
 <h3>电流换算</h3>
 <pre class="codeblk"><span class="c">/* 每 LSB 的电流（3.3V 参考） */</span>
 V_LSB  = VDDA_real / 4095;                <span class="c">/* ≈ 0.806 mV */</span>
-I_PER_LSB = V_LSB / (G × Rs)              <span class="c">/* G=40 V/V, Rs=0.25 mΩ → ≈ 0.081 A/LSB */</span>
+I_PER_LSB = V_LSB / (G × Rs)              <span class="c">/* G=10 V/V, Rs=1 mΩ → ≈ 0.081 A/LSB */</span>
 I_a = (raw_ia - I_zero_ia) * I_PER_LSB;    <span class="c">/* I_zero 来自 DC_CAL（≈2048） */</span>
 <span class="c">/* 满量程：对称约 ±135 A——负向受 SO 线性下限 0.3V 限制。小电流段精度差是预期的。 */</span></pre>
 
@@ -708,7 +708,7 @@ I_a = (raw_ia - I_zero_ia) * I_PER_LSB;    <span class="c">/* I_zero 来自 DC_C
 <h2 id="drv"><span class="n">8</span>DRV8301 驱动</h2>
 <ul>
   <li><strong>帧格式</strong>：16 位 SPI 帧（bit15 = R/W，bit14~11 = 地址，bit10~0 = 数据）。<strong>读要两帧</strong>：第 N 帧发命令、第 N+1 帧收数据。</li>
-  <li><strong>必配项（CTRL1）</strong>：<code>OC_MODE = OC latch shut down</code>（默认逐周期限流不拉 nFAULT，BKIN 链会静默失效）、<code>OC_ADJ_SET</code> 按 RDS(on) × 跳闸电流查 SLOS719F Table 13、<b>增益 40 V/V</b>（默认 10，必须显式写）、<b>6-PWM 模式</b>、栅极驱动电流。</li>
+  <li><strong>必配项（CTRL1）</strong>：<code>OC_MODE = OC latch shut down</code>（默认逐周期限流不拉 nFAULT，BKIN 链会静默失效）、<code>OC_ADJ_SET</code> 按 RDS(on) × 跳闸电流查 SLOS719F Table 13、<b>增益 10 V/V</b>（默认 10，必须显式写）、<b>6-PWM 模式</b>、栅极驱动电流。</li>
   <li><strong>CTRL2</strong>：OCP 分档等——按 SLOS719F 配置。</li>
   <li><strong>读回校验</strong>：写完逐个寄存器读回比对，不一致判失败（自检环节，不可省）。</li>
   <li><strong>状态读取</strong>：FAULT 状态位（OC 状态位读后自清——读到立即存入变量）；nOCTW 原因（OTW/OC）同样放主循环。</li>
@@ -750,14 +750,14 @@ I_a = (raw_ia - I_zero_ia) * I_PER_LSB;    <span class="c">/* I_zero 来自 DC_C
     <tr><td>电流环 / PWM</td><td><code>20 kHz</code>（ARR 4249 中心对齐）</td><td>TRGO2 = OC5REF @ 4200</td></tr>
     <tr><td>ADC 内核时钟</td><td><code>42.5 MHz</code>（SYSCLK/4）</td><td>双 ADC 上限 52 MHz</td></tr>
     <tr><td>采样时间</td><td>注入 6.5 cycles（≈0.45 µs/通道）</td><td>规则组 92.5 / VREFINT 247.5</td></tr>
-    <tr><td>分流 / 增益</td><td><code>0.25 mΩ</code> 开尔文 · <code>40 V/V</code></td><td>满量程对称 ≈ ±135 A</td></tr>
+    <tr><td>分流 / 增益</td><td><code>1 mΩ</code> 开尔文 · <code>10 V/V</code></td><td>满量程对称 ≈ ±135 A</td></tr>
     <tr><td>电流换算</td><td>≈ <code>0.081 A/LSB</code>（VDDA=3.3 V）</td><td>零点 ≈ 2048（REF/2 = 1.65 V）</td></tr>
     <tr><td>VDDA 校正</td><td><code>3.000 × VREFINT_CAL / VREFINT_meas</code></td><td>VREFINT_CAL @ 0x1FFF75AA</td></tr>
     <tr><td>调制比</td><td><code>≤ 0.93</code></td><td>台架扫定，低侧窗口预算 2.5 µs</td></tr>
     <tr><td>CAN</td><td><code>500 kbps</code> 经典帧，BRP=1/16tq</td><td>HSE 直连 8 MHz，自动重传开</td></tr>
     <tr><td>IWDG</td><td>P32 / W20 / R40 → 20~40 ms 窗口</td><td>喂狗取 30 ms 中段；<code>MX_IWDG_Init()</code> 序列末显式调用</td></tr>
     <tr><td>泄放</td><td>TIM4 10 kHz 档，PB9_CH4</td><td>滞环阈值待 TVS 定稿（占位 26/25 V）</td></tr>
-    <tr><td>母线量程</td><td>36.3 V（100k+10k 分压）</td><td>6S 满电 25.2 V + 回灌裕量</td></tr>
+    <tr><td>母线量程</td><td>27.5 V（240k+33k 分压）</td><td>6S 满电 25.2 V + 回灌裕量</td></tr>
     <tr><td>死区</td><td>TIM 侧 0（由 DTC 电阻承担 50~500 ns）</td><td>台架示波器实测</td></tr>
   </tbody>
 </table></div>
@@ -795,13 +795,13 @@ I_a = (raw_ia - I_zero_ia) * I_PER_LSB;    <span class="c">/* I_zero 来自 DC_C
   <div class="fix"><span class="tag">对策</span>序列固化：EN_GATE → 等 nFAULT → DC_CAL</div>
 </div>
 <div class="pit">
-  <div class="sym"><span class="tag">坑 7</span>DRV 寄存器写 40 V/V 前先开了 PWM</div>
+  <div class="sym"><span class="tag">坑 7</span>DRV 寄存器写 10 V/V 前先开了 PWM</div>
   <div class="why"><span class="tag">机理</span>默认增益 10 V/V、默认 OCP 是逐周期限流；未配的 DRV 上桥等于保护链裸奔</div>
   <div class="fix"><span class="tag">对策</span>先配 CTRL1/2 并读回校验，再置 MOE。此顺序写入方案 3.2 第 7 条</div>
 </div>
 <div class="pit">
   <div class="sym"><span class="tag">坑 8</span>拿小电流段的精度差当电流环故障</div>
-  <div class="why"><span class="tag">机理</span>0.25 mΩ × 40 V/V 下 1 A 只有 10 mV，噪声占比大——是分流方案的预期行为</div>
+  <div class="why"><span class="tag">机理</span>1 mΩ × 10 V/V 下 1 A 只有 10 mV，噪声占比大——是分流方案的预期行为</div>
   <div class="fix"><span class="tag">对策</span>只在 &gt;10 A 段评估电流环；小电流段的问题交给外环</div>
 </div>
 <div class="pit">
